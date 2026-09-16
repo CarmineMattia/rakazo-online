@@ -128,9 +128,15 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
                 // canonical origin (WEB_ORIGIN / BETTER_AUTH_URL) or login is lost
                 // after redirect (e.g. 192.168.x ↔ 127.0.0.1).
                 const aligned = alignMagicLinkToOrigin(url, env.webOrigin || env.baseURL);
-                void env.email
-                  ?.send(magicLinkEmail(email, aligned))
-                  .catch((error) => env.onEmailError?.(error));
+                // Await delivery so the client sees Resend/SMTP failures instead of a fake OK.
+                try {
+                  await env.email!.send(magicLinkEmail(email, aligned));
+                } catch (error) {
+                  env.onEmailError?.(error);
+                  const message =
+                    error instanceof Error ? error.message : "Could not send magic link email";
+                  throw new APIError("BAD_REQUEST", { message });
+                }
               },
             }),
           ]

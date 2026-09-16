@@ -266,8 +266,9 @@
     form.innerHTML = `
       <div id="${BANNER_ID}" style="text-align:center">
         <strong>Check your email</strong>
-        <p style="margin:.5rem 0 0">We sent a link to <strong>${escapeHtml(email)}</strong>. Click it to continue.</p>
-        <p style="margin:.55rem 0 0;font-size:12.5px;opacity:.8">Stay on <strong>${escapeHtml(stayOn)}</strong> after clicking.</p>
+        <p style="margin:.5rem 0 0">If delivery succeeded, you’ll get a magic link at <strong>${escapeHtml(email)}</strong> within a minute. Open it on this same device/browser.</p>
+        <p style="margin:.55rem 0 0;font-size:12.5px;opacity:.8">Stay on <strong>${escapeHtml(stayOn)}</strong> after clicking. Check spam too.</p>
+        <p style="margin:.55rem 0 0;font-size:12.5px;opacity:.75">Temporary/disposable addresses are often blocked by the mail provider.</p>
         <p data-rk="emu" style="margin:.75rem 0 0;font-size:13px;opacity:.85"></p>
         <p style="margin:1rem 0 0"><a href="/sign-in">Back to sign in</a></p>
       </div>`;
@@ -335,7 +336,14 @@
           await sendMagicLink(email, handle || undefined);
           await showSentState(form, email);
         } catch (error) {
-          showAlert(form, error.message || "Could not send magic link");
+          const raw = String(error && error.message ? error.message : error || "");
+          let msg = raw || "Could not send magic link";
+          if (/550|only send testing emails|verify a domain/i.test(raw)) {
+            msg = "Email provider blocked delivery. For now only the Resend account inbox works, or verify your own domain and update EMAIL_FROM.";
+          } else if (/disposable|temporary|not available/i.test(raw)) {
+            msg = "That email address can’t be used. Try a normal inbox (Gmail, etc.).";
+          }
+          showAlert(form, msg);
           if (btn) btn.disabled = false;
         }
       },

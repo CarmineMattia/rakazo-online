@@ -39,6 +39,9 @@
     const style = document.createElement("style");
     style.id = STYLE_ID;
     style.textContent = `
+      /* Product choice: share-link invites only; avatar lives in Settings > Account later */
+      [data-rk="invite-search"], [data-rk="profile-image"] { display: none !important; }
+
       #${SECTION_ID}{margin:.9rem 0 0;border-top:1px solid #2a2a2e;padding-top:.9rem}
       #${SECTION_ID} .rk-social-block+ .rk-social-block{margin-top:.9rem}
       #${SECTION_ID} .rk-social-title{margin:0 0 .4rem;font-size:.9rem;font-weight:650;color:#f4f4f5}
@@ -406,7 +409,24 @@
     delete root.dataset.rkSocialEnhancing;
   }
 
+
+  function hideRetiredSocialBlocks(root) {
+    if (!root) return;
+    root.querySelectorAll("h3,h4,.rk-social-title,strong,div").forEach((el) => {
+      const text = (el.textContent || "").trim();
+      if (/^Invite a registered human/i.test(text)) {
+        const block = el.closest(".rk-social-block") || el.parentElement;
+        if (block) block.setAttribute("data-rk", "invite-search");
+      }
+      if (/^Your profile image/i.test(text)) {
+        const block = el.closest(".rk-social-block") || el.parentElement;
+        if (block) block.setAttribute("data-rk", "profile-image");
+      }
+    });
+  }
+
   function scan() {
+    hideRetiredSocialBlocks(document);
     ensureStyles();
     const root = document.getElementById("rk-invite-root");
     if (root) void enhancePanel(root);
