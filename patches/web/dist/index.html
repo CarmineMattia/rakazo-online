@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Your team of always-on agents." />
+    <meta name="theme-color" content="#0d0d0e" />
+    <meta name="apple-mobile-web-app-title" content="Rakazo" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <title>Rakazo</title>
+    <style>html,body,#root{height:100%;margin:0;background:#0d0d0e}</style>
+    <script>
+      (() => {
+        const key = "rakazo.uiAppearance";
+        let preference = "system";
+        try {
+          const stored = localStorage.getItem(key);
+          if (stored === "system" || stored === "light" || stored === "dark") preference = stored;
+        } catch {}
+        const systemLight =
+          typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: light)").matches;
+        const theme = preference === "system" ? (systemLight ? "light" : "dark") : preference;
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.style.colorScheme = theme;
+        const meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.setAttribute("content", theme === "light" ? "#fafaf8" : "#0d0d0e");
+      })();
+    </script>
+    <script type="module" src="/assets/index-B77hnRVD.js"></script>
+    <link rel="modulepreload" href="/assets/dist-BkK1X_yJ.js">
+    <link rel="modulepreload" href="/assets/src-KlbCvDra.js">
+    <link rel="modulepreload" href="/assets/src-CLDgGZn6.js">
+    <link rel="modulepreload" href="/assets/src-CLEDi_Zs.js">
+    <link rel="modulepreload" href="/assets/chunk-BV7QT456-CuMIKBCV.js">
+    <link rel="modulepreload" href="/assets/desktop-BYVFiiOx.js">
+    <link rel="modulepreload" href="/assets/rpc-CD-0TCdL.js">
+    <link rel="modulepreload" href="/assets/async-CU0Z_3ZN.js">
+    <link rel="modulepreload" href="/assets/use-model-oauth-signin-CCbk5dtK.js">
+    <link rel="modulepreload" href="/assets/mcp-connect-DWBV9liz.js">
+    <link rel="stylesheet" href="/assets/src-BR6yKU7N.css">
+    <link rel="stylesheet" href="/assets/index-kUXz6H8Z.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

@@ -1,0 +1,30 @@
+#!/bin/sh
+# Fluxbox menus treat '#' as a comment, so stock "xterm -bg #111113 ..." never runs.
+# Launch a visible terminal and raise it above maximized Chromium.
+set -eu
+DISPLAY="${DISPLAY:-:1}"
+export DISPLAY
+
+xterm \
+  -bg black \
+  -fg white \
+  -cr white \
+  -title Terminal \
+  -geometry 100x32+48+48 \
+  -fa DejaVuSansMono \
+  -fs 11 &
+pid=$!
+
+i=0
+while [ "$i" -lt 30 ]; do
+  wid=$(xdotool search --onlyvisible --name '^Terminal$' 2>/dev/null | tail -1 || true)
+  if [ -n "${wid:-}" ]; then
+    xdotool windowactivate --sync "$wid" 2>/dev/null || true
+    xdotool windowraise "$wid" 2>/dev/null || true
+    exit 0
+  fi
+  i=$((i + 1))
+  sleep 0.1
+done
+
+wait "$pid" 2>/dev/null || true

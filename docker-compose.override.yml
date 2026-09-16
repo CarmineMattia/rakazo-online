@@ -1,0 +1,54 @@
+# Let api/worker reach host Ollama via host.docker.internal (Linux Docker).
+# SELinux: supervisor must talk to the host docker.sock to spawn bot computers.
+# computer: local image with PCManFM in the Fluxbox menu.
+# RAKAZO_HOST_HOME: host folder bind-mounted into bots at /mnt/local when
+# Settings → Computer → Allow local access is on (default off).
+# Use ~/rakazo-local (not $HOME) so uid 1000 inside bot computers can read it.
+services:
+  computer:
+    image: rakazo/computer:pcmanfm
+    build:
+      context: ./computer
+      dockerfile: Dockerfile
+  api:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      RAKAZO_HOST_HOME: ${HOME}/rakazo-local
+    volumes:
+      - ./patches/api/model-selection.ts:/app/packages/adapters/src/model-selection.ts:ro,z
+      - ./patches/api/executor.ts:/app/packages/adapters/src/executor.ts:ro,z
+      - ./patches/api/docker-sandbox.ts:/app/packages/adapters/src/docker-sandbox.ts:ro,z
+      - ./patches/api/host-aware-sandbox.ts:/app/packages/adapters/src/host-aware-sandbox.ts:ro,z
+      - ./patches/api/router.ts:/app/apps/api/src/router.ts:ro,z
+      - ./patches/api/app.ts:/app/apps/api/src/app.ts:ro,z
+      - ./patches/api/space-invites.ts:/app/apps/api/src/space-invites.ts:ro,z
+      - ./patches/api/computer-settings.ts:/app/apps/api/src/computer-settings.ts:ro,z
+      - ./patches/api/computer-status.ts:/app/apps/api/src/computer-status.ts:ro,z
+      - ./patches/contracts/rpc.ts:/app/packages/contracts/src/rpc.ts:ro,z
+      - ./patches/contracts/domain.ts:/app/packages/contracts/src/domain.ts:ro,z
+      - ./patches/auth/index.ts:/app/packages/auth/src/index.ts:ro,z
+  worker:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      RAKAZO_HOST_HOME: ${HOME}/rakazo-local
+    volumes:
+      - ./patches/api/model-selection.ts:/app/packages/adapters/src/model-selection.ts:ro,z
+      - ./patches/api/executor.ts:/app/packages/adapters/src/executor.ts:ro,z
+      - ./patches/api/docker-sandbox.ts:/app/packages/adapters/src/docker-sandbox.ts:ro,z
+      - ./patches/api/host-aware-sandbox.ts:/app/packages/adapters/src/host-aware-sandbox.ts:ro,z
+      - ./patches/auth/index.ts:/app/packages/auth/src/index.ts:ro,z
+  web:
+    volumes:
+      - ./patches/web/dist:/app/apps/web/dist:ro,z
+  supervisor:
+    security_opt:
+      - label:disable
+    group_add:
+      - "963"
+    environment:
+      RAKAZO_COMPUTER_IMAGE: rakazo/computer:pcmanfm
+      RAKAZO_HOST_HOME: ${HOME}/rakazo-local
+    volumes:
+      - ./patches/supervisor/index.ts:/app/infra/sandboxes/supervisor/src/index.ts:ro,z

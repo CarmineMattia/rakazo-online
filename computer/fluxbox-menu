@@ -1,0 +1,6 @@
+[begin] (Rakazo)
+  [exec] (Browser) {rakazo-browser}
+  [exec] (Terminal) {rakazo-terminal}
+  [exec] (Files) {rakazo-files}
+  [exec] (Editor) {rakazo-edit}
+[end]

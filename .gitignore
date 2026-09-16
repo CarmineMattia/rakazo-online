@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.images.example
+!.env*.example
+*.pem
+*.key
+node_modules/
+.playwright-cli/
+patches/web/dist.broken/
+__pycache__/
+*.pyc
+.DS_Store

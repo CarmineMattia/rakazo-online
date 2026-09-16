@@ -1,0 +1,1 @@
+async function e(e,t){t?.aborted||await new Promise(n=>{let r=()=>{clearTimeout(i),t?.removeEventListener(`abort`,r),n()},i=setTimeout(r,e);t?.addEventListener(`abort`,r,{once:!0})})}export{e as t};

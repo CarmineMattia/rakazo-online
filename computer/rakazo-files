@@ -1,0 +1,34 @@
+#!/bin/sh
+# Open PCManFM and raise it above maximized Chromium.
+set -eu
+DISPLAY="${DISPLAY:-:1}"
+export DISPLAY
+target="${1:-/home/rakazo}"
+
+# Ensure double-click on .txt opens Mousepad (volume home may lack mimeapps).
+mkdir -p "$HOME/.config"
+if [ ! -f "$HOME/.config/mimeapps.list" ]; then
+  cat > "$HOME/.config/mimeapps.list" <<'EOF'
+[Default Applications]
+text/plain=mousepad.desktop
+text/x-log=mousepad.desktop
+application/x-zerosize=mousepad.desktop
+EOF
+fi
+
+pcmanfm "$target" &
+pid=$!
+
+i=0
+while [ "$i" -lt 40 ]; do
+  wid=$(xdotool search --onlyvisible --class Pcmanfm 2>/dev/null | tail -1 || true)
+  if [ -n "${wid:-}" ]; then
+    xdotool windowactivate --sync "$wid" 2>/dev/null || true
+    xdotool windowraise "$wid" 2>/dev/null || true
+    exit 0
+  fi
+  i=$((i + 1))
+  sleep 0.1
+done
+
+wait "$pid" 2>/dev/null || true
