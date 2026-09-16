@@ -135,11 +135,15 @@ import {
 } from "@rakazo/db";
 import {
   createSpaceInvite,
+  createDirectSpaceInvite,
+  declineSpaceInvite,
+  listReceivedSpaceInvites,
   listSpaceInvites,
   listSpacePeople,
   previewSpaceInvite,
   redeemSpaceInvite,
 } from "./space-invites.js";
+import { normalizeProfileImage, searchUsers } from "./social.js";
 import { getLogger } from "@rakazo/logging";
 import { deleteAgentSecret, listAgentSecrets, putAgentSecret } from "./agent-secrets.js";
 import { createAgentSkillsService } from "./agent-skills.js";
@@ -501,9 +505,26 @@ export function createRouter(deps: RouterDeps) {
       update: authed.preferences.update.handler(async ({ context, input }): Promise<Me> => {
         await deps.prisma.user.update({
           where: { id: context.actor.userId },
-          data: { avatarStyle: input.avatarStyle },
+          data: {
+            ...(input.avatarStyle !== undefined ? { avatarStyle: input.avatarStyle } : {}),
+            ...(input.image !== undefined ? { image: normalizeProfileImage(input.image) } : {}),
+          },
         });
         return meDto(deps, context.actor);
+      }),
+    },
+    users: {
+      search: authed.users.search.handler(async ({ context, input }) => {
+        try {
+          return { users: await searchUsers(deps.prisma, context.actor, input.q) };
+        } catch (error) {
+          throw new ORPCError("BAD_REQUEST", {
+            message:
+              error instanceof Error && "status" in error
+                ? error.message
+                : "Could not search humans",
+          });
+        }
       }),
     },
     spaces: {
@@ -677,6 +698,31 @@ export function createRouter(deps: RouterDeps) {
         list: authed.spaces.invites.list.handler(async ({ context }) => ({
           invites: await listSpaceInvites(deps.prisma, context.actor),
         })),
+        direct: authed.spaces.invites.direct.handler(async ({ context, input }) => {
+          try {
+            return await createDirectSpaceInvite(deps.prisma, context.actor, input.userId);
+          } catch (error) {
+            const message =
+              error instanceof Error && "status" in error
+                ? error.message
+                : "Could not invite human";
+            throw new ORPCError("BAD_REQUEST", { message });
+          }
+        }),
+        received: authed.spaces.invites.received.handler(async ({ context }) => ({
+          invites: await listReceivedSpaceInvites(deps.prisma, context.actor.userId),
+        })),
+        decline: authed.spaces.invites.decline.handler(async ({ context, input }) => {
+          try {
+            return await declineSpaceInvite(deps.prisma, context.actor.userId, input.token);
+          } catch (error) {
+            const message =
+              error instanceof Error && "status" in error
+                ? error.message
+                : "Could not decline invite";
+            throw new ORPCError("BAD_REQUEST", { message });
+          }
+        }),
         redeem: authed.spaces.invites.redeem.handler(async ({ context, input }) => {
           try {
             return await redeemSpaceInvite(deps.prisma, context.actor.userId, input.token);
@@ -4887,6 +4933,7 @@ async function meDto(deps: RouterDeps, actor: Actor): Promise<Me> {
     canChooseHostComputer: actor.isDeploymentOwner && deps.env.sandboxProvider === "docker",
     sandboxProvider: deps.env.sandboxProvider,
     avatarStyle: user.avatarStyle === "organic" ? "organic" : "robot",
+    image: user.image ?? null,
   };
 }
 

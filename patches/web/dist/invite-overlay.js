@@ -100,7 +100,9 @@
       list.innerHTML = data.people
         .map(
           (p) => `<li>
-            <span class="rk-avatar">${initial(p.name)}</span>
+            <span class="rk-avatar">${
+              p.image ? `<img src="${escapeHtml(p.image)}" alt="" referrerpolicy="no-referrer">` : initial(p.name)
+            }</span>
             <div class="rk-meta"><strong>${escapeHtml(p.name)}${p.isYou ? " (you)" : ""}</strong><span>${escapeHtml(p.email || p.role)}</span></div>
             <span class="rk-badge">${escapeHtml(p.role)}</span>
           </li>`,
@@ -299,4 +301,8 @@
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();
+  document.addEventListener("rakazo:social-changed", () => {
+    const root = document.getElementById(ROOT_ID);
+    if (root?.classList.contains("rk-open")) void refreshPeople(root);
+  });
 })();

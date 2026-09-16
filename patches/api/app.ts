@@ -80,11 +80,12 @@ import {
 } from "@rakazo/logging";
 import { requestLogging } from "@rakazo/logging/hono";
 import { MarkdownMemoryStore } from "@rakazo/memory";
-import { Hono } from "hono";
+import { Hono, type MiddlewareHandler } from "hono";
 import { cors } from "hono/cors";
 import { type AppEnv, loadEnv } from "./env.js";
 import { mountLocalSettings } from "./local-settings.js";
 import { mountComputerSettings } from "./computer-settings.js";
+import { mountSocialRoutes } from "./social.js";
 import { mountSpaceInvites } from "./space-invites.js";
 import {
   createMessagingInboundHandler,
@@ -92,7 +93,7 @@ import {
   wakeMessageRoutines,
 } from "./messaging-inbound.js";
 import { mountMessagingWebhookRoutes } from "./messaging-webhook.js";
-import { mountApiRequestBodyLimits } from "./request-body-limit.js";
+import { MAX_AUTH_REQUEST_BYTES, mountApiRequestBodyLimits, requestBodyLimit } from "./request-body-limit.js";
 import { createRouter } from "./router.js";
 import { mountScreenTarget } from "./screen-proxy.js";
 import { isDeferredReservationLost, TeamChatBridge } from "./team-chat-bridge.js";
@@ -511,6 +512,18 @@ export async function createApp(
     );
   }
   mountApiRequestBodyLimits(app);
+  const trustedSocialMutation: MiddlewareHandler = async (c, next) => {
+    const origin = c.req.header("origin");
+    if (origin && !["GET", "HEAD", "OPTIONS"].includes(c.req.method) && !isTrustedOrigin(origin, env)) {
+      return c.json({ error: "Untrusted origin" }, 403);
+    }
+    await next();
+  };
+  app.use("/api/profile", trustedSocialMutation);
+  app.use("/api/space-invites", trustedSocialMutation);
+  app.use("/api/space-invites/*", trustedSocialMutation);
+  app.use("/api/space-invites", requestBodyLimit(MAX_AUTH_REQUEST_BYTES));
+  app.use("/api/space-invites/*", requestBodyLimit(MAX_AUTH_REQUEST_BYTES));
   mountScreenTarget(app, prisma, env.screenProxySecret);
   app.on(["GET", "POST"], "/api/auth/*", async (c) => {
     const path = new URL(c.req.url).pathname.replace("/api/auth", "");
@@ -520,6 +533,7 @@ export async function createApp(
     return auth.handler(c.req.raw);
   });
   mountLocalSettings(app, { token: env.desktopStackToken, prisma, rpc });
+  mountSocialRoutes(app, { prisma, auth, sessionHeaders });
   mountSpaceInvites(app, { prisma, auth, sessionHeaders });
   mountComputerSettings(app, {
     prisma,
