@@ -5,16 +5,17 @@
 
   let caps = null;
   let capsPromise = null;
-  let mode = "magic"; // magic | password
+  let enhancing = false;
+  let lastSignature = "";
+  let formBound = false;
+  let debounceTimer = 0;
 
   function isAuthPath() {
     return AUTH_PATHS.has(location.pathname);
   }
-
   function isSignUp() {
     return location.pathname === "/sign-up";
   }
-
   function isSignIn() {
     return location.pathname === "/sign-in";
   }
@@ -43,79 +44,57 @@
     style.textContent = `
       #${BANNER_ID}{margin:0 0 .85rem;padding:.7rem .85rem;border-radius:12px;border:1px solid color-mix(in oklab, var(--border, #2a2a2e) 80%, transparent);background:color-mix(in oklab, var(--muted, #1c1c1f) 70%, transparent);color:var(--muted-foreground, #a1a1aa);font:13px/1.4 ui-sans-serif,system-ui,sans-serif}
       #${BANNER_ID} strong{color:var(--foreground, #f4f4f5);font-weight:650}
-      #${BANNER_ID} a,#${BANNER_ID} button.rk-link{appearance:none;border:0;background:none;padding:0;margin:0;color:var(--foreground, #f4f4f5);font:inherit;font-weight:600;text-decoration:underline;cursor:pointer}
-
-      /* Sign-in: cool teal */
-      body.rk-auth-signin{--rk-auth-accent:#3ec5a8;--rk-auth-accent-fg:#06251d;--rk-auth-wash:rgba(62,197,168,.12)}
+      #${BANNER_ID} a{color:var(--foreground, #f4f4f5);font-weight:600}
+      body.rk-auth-signin{--rk-auth-accent:#3ec5a8;--rk-auth-accent-fg:#06251d}
       body.rk-auth-signin #${BANNER_ID}{border-color:color-mix(in oklab, #3ec5a8 35%, var(--border,#2a2a2e));background:linear-gradient(160deg,rgba(62,197,168,.14),transparent 70%),color-mix(in oklab, var(--muted,#1c1c1f) 70%, transparent)}
       body.rk-auth-signin form button[type="submit"]{background:var(--rk-auth-accent)!important;border-color:var(--rk-auth-accent)!important;color:var(--rk-auth-accent-fg)!important}
-      body.rk-auth-signin [data-testid="auth-card"],body.rk-auth-signin form{box-shadow:0 0 0 1px color-mix(in oklab,#3ec5a8 22%,transparent)}
-
-      /* Sign-up: warm amber */
-      body.rk-auth-signup{--rk-auth-accent:#e8a54b;--rk-auth-accent-fg:#2a1a05;--rk-auth-wash:rgba(232,165,75,.14)}
+      body.rk-auth-signup{--rk-auth-accent:#e8a54b;--rk-auth-accent-fg:#2a1a05}
       body.rk-auth-signup #${BANNER_ID}{border-color:color-mix(in oklab, #e8a54b 40%, var(--border,#2a2a2e));background:linear-gradient(160deg,rgba(232,165,75,.16),transparent 70%),color-mix(in oklab, var(--muted,#1c1c1f) 70%, transparent)}
       body.rk-auth-signup form button[type="submit"]{background:var(--rk-auth-accent)!important;border-color:var(--rk-auth-accent)!important;color:var(--rk-auth-accent-fg)!important}
-      body.rk-auth-signup [data-testid="auth-card"],body.rk-auth-signup form{box-shadow:0 0 0 1px color-mix(in oklab,#e8a54b 25%,transparent)}
-
-      body.rk-magic-auth [data-rk-password-wrap]{display:none !important}
-      body.rk-magic-auth.rk-password-fallback [data-rk-password-wrap]{display:block !important}
-      /* Sign-in magic: hide name. Sign-up: show @human name. */
-      body.rk-auth-signin.rk-magic-auth:not(.rk-password-fallback) #name,
-      body.rk-auth-signin.rk-magic-auth:not(.rk-password-fallback) label[for="name"]{display:none !important}
+      /* Magic-only: never show password fields on auth pages */
+      body.rk-magic-auth [data-rk-password-wrap],
+      body.rk-magic-auth input#current-password,
+      body.rk-magic-auth input#new-password,
+      body.rk-magic-auth input[name="password"],
+      body.rk-magic-auth input[type="password"],
+      body.rk-magic-auth label[for="current-password"],
+      body.rk-magic-auth label[for="new-password"],
+      body.rk-magic-auth label[for="password"],
+      body.rk-magic-auth a[href="/forgot-password"],
+      body.rk-magic-auth a[href*="forgot-password"]{display:none !important}
+      body.rk-auth-signin.rk-magic-auth #name,
+      body.rk-auth-signin.rk-magic-auth label[for="name"]{display:none !important}
       body.rk-auth-signup #name,
       body.rk-auth-signup label[for="name"]{display:revert !important}
-      body.rk-magic-auth form button[type="submit"]{letter-spacing:.01em}
       .rk-handle-hint{margin:.15rem 0 .55rem;font-size:12px;color:var(--muted-foreground,#a1a1aa)}
       .rk-existing-banner{margin:0 0 .85rem;padding:.75rem .9rem;border-radius:12px;border:1px solid color-mix(in oklab,#3ec5a8 45%,transparent);background:rgba(62,197,168,.12);color:var(--foreground,#f4f4f5);font:13px/1.4 ui-sans-serif,system-ui,sans-serif}
     `;
-    document.head.appendChild(style);
-  }
-
-  function applyPathTheme() {
-    document.body.classList.toggle("rk-auth-signin", isSignIn());
-    document.body.classList.toggle("rk-auth-signup", isSignUp());
+    document.documentElement.appendChild(style);
   }
 
   function findAuthForm() {
     const email = document.querySelector('form input#email, form input[name="email"]');
-    return email?.closest("form") || null;
+    return email ? email.closest("form") : null;
   }
 
   function wrapPasswordFields(form) {
     const password = form.querySelector(
-      'input#current-password, input#new-password, input[name="password"]',
+      'input#current-password, input#new-password, input[name="password"], input[type="password"]',
     );
-    if (!password) return null;
+    if (!password) return;
     let wrap = password.closest("[data-rk-password-wrap]");
-    if (wrap) return wrap;
+    if (wrap) return;
     wrap = password.parentElement;
-    while (wrap && wrap !== form && !wrap.querySelector("label")) {
-      wrap = wrap.parentElement;
+    if (!wrap || wrap === form) return;
+    // climb to include label if present
+    let node = wrap;
+    while (node && node !== form && !node.querySelector("label")) {
+      node = node.parentElement;
     }
-    if (!wrap || wrap === form) wrap = password.parentElement;
-    if (!wrap || wrap === form) return null;
-    wrap.setAttribute("data-rk-password-wrap", "1");
-    return wrap;
-  }
-
-  function ensureHumanNameField(form) {
-    const nameInput = form.querySelector('input#name, input[name="name"]');
-    if (!nameInput) return null;
-    nameInput.placeholder = "@yourname";
-    nameInput.autoComplete = "username";
-    nameInput.maxLength = 32;
-    const label = form.querySelector('label[for="name"]');
-    if (label) label.textContent = "@human name";
-    let hint = form.querySelector("[data-rk-handle-hint]");
-    if (!hint && isSignUp()) {
-      hint = document.createElement("p");
-      hint.className = "rk-handle-hint";
-      hint.setAttribute("data-rk-handle-hint", "1");
-      hint.textContent = "How others will see you — letters, numbers, _ (e.g. @crime).";
-      nameInput.insertAdjacentElement("afterend", hint);
+    const target = node && node !== form ? node : wrap;
+    if (!target.getAttribute("data-rk-password-wrap")) {
+      target.setAttribute("data-rk-password-wrap", "1");
     }
-    if (hint) hint.style.display = isSignUp() ? "" : "none";
-    return nameInput;
   }
 
   function normalizeHandle(raw) {
@@ -127,19 +106,43 @@
 
   function setSubmitLabel(form, text) {
     const btn = form.querySelector('button[type="submit"]');
-    if (!btn) return;
-    const label = btn.querySelector("span") || btn;
-    if (label.childElementCount === 0) label.textContent = text;
-    else {
-      btn.setAttribute("data-rk-submit-label", text);
-      for (const node of btn.childNodes) {
-        if (node.nodeType === Node.TEXT_NODE && node.textContent.trim()) {
-          node.textContent = text;
-          return;
-        }
-      }
-      btn.appendChild(document.createTextNode(text));
+    if (!btn || btn.getAttribute("data-rk-submit-label") === text) return;
+    btn.setAttribute("data-rk-submit-label", text);
+    const span = btn.querySelector("span");
+    if (span && span.childElementCount === 0) {
+      span.textContent = text;
+      return;
     }
+    if (btn.childElementCount === 0) {
+      btn.textContent = text;
+      return;
+    }
+    for (const node of btn.childNodes) {
+      if (node.nodeType === Node.TEXT_NODE && node.textContent.trim()) {
+        node.textContent = text;
+        return;
+      }
+    }
+  }
+
+  function ensureHumanNameField(form) {
+    const nameInput = form.querySelector('input#name, input[name="name"]');
+    if (!nameInput) return null;
+    if (nameInput.placeholder !== "@yourname") nameInput.placeholder = "@yourname";
+    nameInput.autoComplete = "username";
+    nameInput.maxLength = 32;
+    const label = form.querySelector('label[for="name"]');
+    if (label && label.textContent !== "@human name") label.textContent = "@human name";
+    let hint = form.querySelector("[data-rk-handle-hint]");
+    if (!hint && isSignUp()) {
+      hint = document.createElement("p");
+      hint.className = "rk-handle-hint";
+      hint.setAttribute("data-rk-handle-hint", "1");
+      hint.textContent = "How others will see you — letters, numbers, _ (e.g. @crime).";
+      nameInput.insertAdjacentElement("afterend", hint);
+    }
+    if (hint) hint.style.display = isSignUp() ? "" : "none";
+    return nameInput;
   }
 
   function ensureExistingEmailBanner() {
@@ -157,7 +160,7 @@
       "<strong>You already have an account</strong> with that email — sign in here instead.";
     form.prepend(el);
     const email = params.get("email");
-    const emailInput = form.querySelector('input#email, input[name="email"]');
+    const emailInput = form.querySelector('input#email, form input[name="email"]');
     if (email && emailInput && !emailInput.value) emailInput.value = email;
   }
 
@@ -171,61 +174,20 @@
     const emulatorHint = caps?.emailEmulator
       ? ` Dev: open <a href="/api/dev/emails" target="_blank" rel="noreferrer">/api/dev/emails</a> for the link.`
       : "";
-
-    if (isSignUp()) {
-      if (mode === "magic") {
-        banner.innerHTML = `<strong>Create your account</strong> — email + @human name, then a magic link.${emulatorHint}
-          <div style="margin-top:.35rem"><button type="button" class="rk-link" data-rk="use-password">Use password instead</button></div>`;
-        banner.querySelector("[data-rk=use-password]")?.addEventListener("click", () => {
-          mode = "password";
-          document.body.classList.add("rk-password-fallback");
-          ensureBanner(form);
-          setSubmitLabel(form, "Create account");
-        });
-        setSubmitLabel(form, "Send magic link");
-        document.body.classList.remove("rk-password-fallback");
-      } else {
-        banner.innerHTML = `<strong>Create with password</strong> — or
-          <button type="button" class="rk-link" data-rk="use-magic">use a magic link</button> instead.`;
-        banner.querySelector("[data-rk=use-magic]")?.addEventListener("click", () => {
-          mode = "magic";
-          document.body.classList.remove("rk-password-fallback");
-          ensureBanner(form);
-        });
-        setSubmitLabel(form, "Create account");
-      }
-      return;
+    const html = isSignUp()
+      ? `<strong>Create your account</strong> — email + @human name, then we email you a magic link.${emulatorHint}`
+      : `<strong>Welcome back</strong> — enter your email and we’ll send a magic link.${emulatorHint}`;
+    if (banner.dataset.rkHtml !== html) {
+      banner.dataset.rkHtml = html;
+      banner.innerHTML = html;
     }
-
-    // Sign-in
-    if (mode === "magic") {
-      banner.innerHTML = `<strong>Welcome back</strong> — enter your email and we’ll send a magic link.${emulatorHint}
-        <div style="margin-top:.35rem"><button type="button" class="rk-link" data-rk="use-password">Use password instead</button></div>`;
-      banner.querySelector("[data-rk=use-password]")?.addEventListener("click", () => {
-        mode = "password";
-        document.body.classList.add("rk-password-fallback");
-        ensureBanner(form);
-        setSubmitLabel(form, "Continue with email");
-      });
-      setSubmitLabel(form, "Send magic link");
-      document.body.classList.remove("rk-password-fallback");
-    } else {
-      banner.innerHTML = `<strong>Password sign-in</strong> — or
-        <button type="button" class="rk-link" data-rk="use-magic">send a magic link</button> instead.`;
-      banner.querySelector("[data-rk=use-magic]")?.addEventListener("click", () => {
-        mode = "magic";
-        document.body.classList.remove("rk-password-fallback");
-        ensureBanner(form);
-      });
-      setSubmitLabel(form, "Continue with email");
-    }
+    setSubmitLabel(form, "Send magic link");
   }
 
   function destinationUrls() {
     const params = new URLSearchParams(location.search);
     const next = params.get("next");
-    const safeNext =
-      next && next.startsWith("/") && !next.startsWith("//") ? next : null;
+    const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : null;
     const origin = (caps && caps.webOrigin) || location.origin;
     return {
       callbackURL: `${origin}${safeNext || "/app"}`,
@@ -248,20 +210,12 @@
 
   async function sendMagicLink(email, name) {
     const { callbackURL, newUserCallbackURL, errorCallbackURL } = destinationUrls();
-    const body = {
-      email,
-      callbackURL,
-      newUserCallbackURL,
-      errorCallbackURL,
-    };
+    const body = { email, callbackURL, newUserCallbackURL, errorCallbackURL };
     if (name) body.name = name;
     const res = await fetch("/api/auth/sign-in/magic-link", {
       method: "POST",
       credentials: "include",
-      headers: {
-        "content-type": "application/json",
-        origin: location.origin,
-      },
+      headers: { "content-type": "application/json", origin: location.origin },
       body: JSON.stringify(body),
     });
     const data = await res.json().catch(() => ({}));
@@ -271,6 +225,14 @@
       throw new Error(typeof msg === "string" ? msg : "Could not send link");
     }
     return data;
+  }
+
+  function escapeHtml(s) {
+    return String(s || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
   }
 
   async function latestEmulatorLink(forEmail) {
@@ -309,23 +271,14 @@
         <p data-rk="emu" style="margin:.75rem 0 0;font-size:13px;opacity:.85"></p>
         <p style="margin:1rem 0 0"><a href="/sign-in">Back to sign in</a></p>
       </div>`;
+    lastSignature = "sent:" + email;
+    formBound = false;
     const emu = form.querySelector("[data-rk=emu]");
     if (!caps?.emailEmulator || !emu) return;
     emu.textContent = "Loading local sign-in link…";
     const link = await latestEmulatorLink(email);
-    if (link) {
-      emu.innerHTML = `Local mail: <a href="${escapeHtml(link)}">Open magic link</a>`;
-    } else {
-      emu.innerHTML = `Open <a href="/api/dev/emails" target="_blank" rel="noreferrer">/api/dev/emails</a>.`;
-    }
-  }
-
-  function escapeHtml(s) {
-    return String(s || "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
+    if (link) emu.innerHTML = `Local mail: <a href="${escapeHtml(link)}">Open magic link</a>`;
+    else emu.innerHTML = `Open <a href="/api/dev/emails" target="_blank" rel="noreferrer">/api/dev/emails</a>.`;
   }
 
   function showAlert(form, message) {
@@ -343,6 +296,7 @@
   function attachForm(form) {
     if (form.dataset.rkMagicBound === "1") return;
     form.dataset.rkMagicBound = "1";
+    formBound = true;
     wrapPasswordFields(form);
     ensureHumanNameField(form);
     ensureBanner(form);
@@ -351,66 +305,16 @@
     const nameInput = form.querySelector('input#name, input[name="name"]');
     nameInput?.addEventListener("input", () => {
       if (!isSignUp()) return;
-      const caret = nameInput.selectionStart;
       const before = nameInput.value;
       const normalized = normalizeHandle(before);
       const display = normalized ? `@${normalized}` : before.startsWith("@") ? "@" : "";
-      if (display !== before) {
-        nameInput.value = display;
-        try {
-          nameInput.setSelectionRange(Math.min(caret, display.length), Math.min(caret, display.length));
-        } catch (_) {}
-      }
+      if (display !== before) nameInput.value = display;
     });
 
     form.addEventListener(
       "submit",
       async (event) => {
-        // Password signup/sign-in: still intercept signup to check existing email
-        if (mode === "password") {
-          if (!isSignUp()) return;
-          event.preventDefault();
-          event.stopImmediatePropagation();
-          const emailInput = form.querySelector('input#email, input[name="email"]');
-          const email = (emailInput?.value || "").trim().toLowerCase();
-          const handle = normalizeHandle(nameInput?.value || "");
-          const password = form.querySelector(
-            'input#new-password, input#current-password, input[name="password"]',
-          )?.value;
-          if (!email) return;
-          if (!handle || handle.length < 2) {
-            showAlert(form, "Pick an @human name (at least 2 characters).");
-            return;
-          }
-          const btn = form.querySelector('button[type="submit"]');
-          if (btn) btn.disabled = true;
-          try {
-            if (await checkEmailExists(email)) {
-              location.assign(
-                `/sign-in?existing=1&email=${encodeURIComponent(email)}`,
-              );
-              return;
-            }
-            // Let native better-auth signup proceed via fetch
-            const res = await fetch("/api/auth/sign-up/email", {
-              method: "POST",
-              credentials: "include",
-              headers: { "content-type": "application/json", origin: location.origin },
-              body: JSON.stringify({ email, password, name: handle }),
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) {
-              throw new Error(data.message || data.error || "Could not create account");
-            }
-            location.assign((caps && caps.webOrigin ? caps.webOrigin : "") + "/app");
-          } catch (error) {
-            showAlert(form, error.message || "Could not create account");
-            if (btn) btn.disabled = false;
-          }
-          return;
-        }
-
-        if (mode !== "magic" || !caps?.magicLink) return;
+        if (!caps?.magicLink && !isSignUp()) return;
         event.preventDefault();
         event.stopImmediatePropagation();
         const emailInput = form.querySelector('input#email, input[name="email"]');
@@ -424,13 +328,9 @@
         const btn = form.querySelector('button[type="submit"]');
         if (btn) btn.disabled = true;
         try {
-          if (isSignUp()) {
-            if (await checkEmailExists(email)) {
-              location.assign(
-                `/sign-in?existing=1&email=${encodeURIComponent(email)}`,
-              );
-              return;
-            }
+          if (isSignUp() && (await checkEmailExists(email))) {
+            location.assign(`/sign-in?existing=1&email=${encodeURIComponent(email)}`);
+            return;
           }
           await sendMagicLink(email, handle || undefined);
           await showSentState(form, email);
@@ -444,35 +344,61 @@
   }
 
   async function enhance() {
-    if (!isAuthPath()) {
-      document.body.classList.remove(
-        "rk-magic-auth",
-        "rk-password-fallback",
-        "rk-auth-signin",
-        "rk-auth-signup",
-      );
-      document.getElementById(BANNER_ID)?.remove();
-      return;
-    }
-    ensureStyles();
-    applyPathTheme();
-    const capabilities = await loadCaps();
-    if (!capabilities?.magicLink && !isSignUp()) {
-      // still theme sign-in without magic
+    if (enhancing) return;
+    enhancing = true;
+    try {
+      if (!isAuthPath()) {
+        document.body.classList.remove("rk-magic-auth", "rk-auth-signin", "rk-auth-signup");
+        document.getElementById(BANNER_ID)?.remove();
+        lastSignature = "";
+        formBound = false;
+        return;
+      }
+
+      // Forgot-password → bounce to magic sign-in
+      if (location.pathname === "/forgot-password") {
+        location.replace("/sign-in");
+        return;
+      }
+
+      ensureStyles();
+      document.body.classList.toggle("rk-auth-signin", isSignIn());
+      document.body.classList.toggle("rk-auth-signup", isSignUp());
+
+      const capabilities = await loadCaps();
+      if (!capabilities?.magicLink && !isSignUp()) {
+        ensureExistingEmailBanner();
+        return;
+      }
+
+      document.body.classList.add("rk-magic-auth");
+      const form = findAuthForm();
+      if (!form) return;
+
+      const signature = `${location.pathname}|${location.search}|${form.dataset.rkMagicBound || "0"}`;
+      if (signature === lastSignature && form.dataset.rkMagicBound === "1") {
+        // Soft refresh only labels / password wrap (no innerHTML churn)
+        wrapPasswordFields(form);
+        setSubmitLabel(form, "Send magic link");
+        return;
+      }
+      lastSignature = signature;
+      attachForm(form);
+      wrapPasswordFields(form);
+      ensureHumanNameField(form);
+      ensureBanner(form);
       ensureExistingEmailBanner();
-      return;
+    } finally {
+      enhancing = false;
     }
-    document.body.classList.add("rk-magic-auth");
-    const form = findAuthForm();
-    if (!form) return;
-    if (location.pathname === "/forgot-password") {
-      document.body.classList.remove("rk-magic-auth", "rk-auth-signin", "rk-auth-signup");
-      return;
-    }
-    attachForm(form);
-    ensureHumanNameField(form);
-    ensureBanner(form);
-    ensureExistingEmailBanner();
+  }
+
+  function scheduleEnhance() {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      debounceTimer = 0;
+      enhance();
+    }, 80);
   }
 
   function boot() {
@@ -484,23 +410,23 @@
     }, 250);
 
     const obs = new MutationObserver(() => {
-      if (isAuthPath()) enhance();
+      if (isAuthPath()) scheduleEnhance();
     });
     obs.observe(document.getElementById("root") || document.body, {
       childList: true,
       subtree: true,
     });
 
-    window.addEventListener("popstate", () => enhance());
+    window.addEventListener("popstate", scheduleEnhance);
     const push = history.pushState;
     history.pushState = function (...args) {
       push.apply(this, args);
-      setTimeout(enhance, 0);
+      scheduleEnhance();
     };
     const replace = history.replaceState;
     history.replaceState = function (...args) {
       replace.apply(this, args);
-      setTimeout(enhance, 0);
+      scheduleEnhance();
     };
   }
 

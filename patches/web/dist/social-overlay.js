@@ -1,4 +1,8 @@
 (() => {
+  // Skip heavy DOM observers on auth pages (prevents login freezes).
+  const __rkAuthPaths = new Set(["/sign-in", "/sign-up", "/forgot-password"]);
+  if (__rkAuthPaths.has(location.pathname)) return;
+
   const SPACE_KEY = "rakazo:space-id";
   const STYLE_ID = "rk-social-style";
   const SECTION_ID = "rk-social-sections";
