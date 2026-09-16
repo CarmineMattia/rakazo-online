@@ -1183,6 +1183,7 @@ export const MeSchema = z.object({
   canChooseHostComputer: z.boolean(),
   sandboxProvider: z.string(),
   avatarStyle: AvatarStyleSchema,
+  image: z.string().nullable(),
 });
 export type Me = z.infer<typeof MeSchema>;
 

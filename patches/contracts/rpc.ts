@@ -84,6 +84,15 @@ import { SearchQueryOutputSchema } from "./search.js";
 
 const botId = z.object({ botId: Id });
 const groupId = z.object({ groupId: Id });
+const SpaceInviteTokenSchema = z.string().regex(/^[a-f0-9]{48}$/);
+const ProfileImageSchema = z.string().max(400 * 1024).nullable();
+const HumanSummarySchema = z.object({
+  userId: Id,
+  username: z.string(),
+  name: z.string(),
+  email: z.string().email().nullable(),
+  image: z.string().nullable(),
+});
 
 const threadTarget = z
   .object({
@@ -137,7 +146,29 @@ export const appContract = {
   health: oc.output(z.object({ ok: z.literal(true), version: z.string() })),
   me: oc.output(MeSchema),
   preferences: {
-    update: oc.input(z.object({ avatarStyle: AvatarStyleSchema })).output(MeSchema),
+    update: oc
+      .input(
+        z
+          .object({
+            avatarStyle: AvatarStyleSchema.optional(),
+            image: ProfileImageSchema.optional(),
+          })
+          .refine((input) => input.avatarStyle !== undefined || input.image !== undefined, {
+            message: "Provide avatarStyle or image",
+          }),
+      )
+      .output(MeSchema),
+  },
+  users: {
+    search: oc.input(z.object({ q: z.string().trim().max(64) })).output(
+      z.object({
+        users: z.array(
+          HumanSummarySchema.extend({
+            membership: z.enum(["member", "invited", "available"]),
+          }),
+        ),
+      }),
+    ),
   },
   spaces: {
     list: oc.output(SpaceNavigationSchema),
@@ -163,24 +194,52 @@ export const appContract = {
               createdAt: IsoDate,
               expiresAt: IsoDate,
               redeemedAt: IsoDate.nullable(),
+              declinedAt: IsoDate.nullable(),
               active: z.boolean(),
+              target: HumanSummarySchema.nullable(),
             }),
           ),
         }),
       ),
+      direct: oc.input(z.object({ userId: Id })).output(
+        z.object({
+          status: z.enum(["pending", "already_member", "already_invited"]),
+          spaceId: Id,
+          spaceName: z.string(),
+          expiresAt: IsoDate.nullable(),
+          target: HumanSummarySchema,
+        }),
+      ),
+      received: oc.output(
+        z.object({
+          invites: z.array(
+            z.object({
+              token: z.string(),
+              spaceId: Id,
+              spaceName: z.string(),
+              inviterName: z.string(),
+              inviterImage: z.string().nullable(),
+              createdAt: IsoDate,
+              expiresAt: IsoDate,
+            }),
+          ),
+        }),
+      ),
+      decline: oc
+        .input(z.object({ token: SpaceInviteTokenSchema }))
+        .output(z.object({ ok: z.literal(true) })),
       redeem: oc
-        .input(z.object({ token: z.string().trim().min(1) }))
+        .input(z.object({ token: SpaceInviteTokenSchema }))
         .output(z.object({ spaceId: Id, spaceName: z.string() })),
-      preview: oc
-        .input(z.object({ token: z.string().trim().min(1) }))
-        .output(
-          z.object({
-            spaceId: Id,
-            spaceName: z.string(),
-            inviterName: z.string(),
-            expiresAt: IsoDate,
-          }),
-        ),
+      preview: oc.input(z.object({ token: SpaceInviteTokenSchema })).output(
+        z.object({
+          spaceId: Id,
+          spaceName: z.string(),
+          inviterName: z.string(),
+          expiresAt: IsoDate,
+          targeted: z.boolean(),
+        }),
+      ),
     },
     members: {
       list: oc.output(
