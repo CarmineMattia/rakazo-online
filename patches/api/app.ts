@@ -89,6 +89,7 @@ import { mountSocialRoutes } from "./social.js";
 import { mountGroupSharing } from "./group-sharing.js";
 import { mountSpaceInvites } from "./space-invites.js";
 import { createLocalRunnerGateway, ensureLocalRunnerTables } from "./local-runners.js";
+import { mapDomainRpcErrors } from "./rpc-errors.js";
 import {
   createMessagingInboundHandler,
   teamChatSenderCanWakeMessageRoutines,
@@ -462,7 +463,11 @@ export async function createApp(
     },
   });
   const rpc = new RPCHandler(router, {
-    clientInterceptors: [onError((error, { path }) => logUnexpectedRpcError(error, path))],
+    clientInterceptors: [
+      onError((error, { path }) => logUnexpectedRpcError(error, path)),
+      // Rakijazios: IsolationError → 404 instead of a 500 (see rpc-errors.ts).
+      mapDomainRpcErrors,
+    ],
   });
   const app = new Hono();
   app.use("*", requestLogging(logger));
