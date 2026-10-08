@@ -1,7 +1,7 @@
 # Share your local AI — technical design
 
 Status: **design only** (not implemented).  
-Related roadmap: README → Roadmap → Bot visibility / Bot marketplace.  
+Related roadmap: README → Roadmap → Share your local AI / Bot marketplace / Device node app (M5).  
 Audience: implementers of `rakazo-online` overlays and any future upstream contribution.
 
 ## 1. Problem
@@ -24,6 +24,31 @@ Neither path lets user A safely offer *their* laptop GPU to bots that user B tal
 4. **V1 = inference only.** Chat completions (streaming). No tool/computer/file bridging through the runner.
 5. **Transparency.** Consumers see that a bot runs on someone else's hardware. Sharers are told their model sees group messages.
 6. **Marketplace later.** A published bot may be backed by a shared local model (M4).
+
+### 2.1 Decisions (recorded 2026-10-08)
+
+**D1 — Runner offline ⇒ the reply fails; no automatic fallback model.**  
+If the sharer's runner is offline (or drops mid-run), the bot run fails fast and the user sees a
+clear notice in the chat, e.g. *"{Bot} runs on {owner}'s computer, which is offline right now.
+Try again later."* Rakijazios does **not** silently switch to another model (cloud or deployment).
+Reasons: no surprise bills, no surprise data flows to a third-party provider, and the
+"runs on {owner}'s hardware" promise stays true. This closes **O4**.
+
+**D2 — Onboarding: no deployment default model.**  
+New users connect **their own** model: an API key (OpenRouter, Anthropic, Groq, …), an
+OpenAI-compatible server, or the hardware Rakijazios is installed on (the operator's local models).
+Carmine's personal key (or any operator key) is **never** used as a default for other users.
+Today this matches the code path: `needsModel` stays true until the user has a default
+`space_model_preferences` row, because `PI_DEFAULT_PROVIDER=openai-compatible` yields no
+`deploymentModelKey` (`router.ts` `modelSetup`, `deployment-model.ts`).
+
+*Possible future UX improvement (optional, not committed):* a **"Connect with OpenRouter"** button
+using OpenRouter's OAuth PKCE flow (`https://openrouter.ai/auth` → `POST /api/v1/auth/keys`), so each
+user gets their **own** OpenRouter key without copy-pasting; it would be stored like any pasted key in
+`user_model_credentials` (provider `openrouter`). A free OpenRouter account is enough for `:free`
+models (account-wide free-model limits apply), but a key is always required: an unauthenticated
+`POST https://openrouter.ai/api/v1/chat/completions` with a `:free` model returned **HTTP 401**
+("No cookie auth credentials found") when verified on 2026-10-08.
 
 ## 3. What the code already does (facts from Host-002)
 
@@ -231,7 +256,7 @@ V1 **does not** grant file/command/computer access. Computer sandbox stays on Ra
 
 - Section "On my computer" listing online offered models.  
 - Subtitle: **Runs on {deviceName} ({owner display name})**.  
-- If offline: disable selection or show warning; optional fallback model (**O4**).
+- If offline: disable selection or show a warning. No fallback model (**D1**).
 
 **Shared group / People panel**
 
@@ -244,7 +269,7 @@ V1 **does not** grant file/command/computer access. Computer sandbox stays on Ra
 
 | Case | Behavior |
 |---|---|
-| Runner offline | Run fails fast with clear message; optional fallback to owner's cloud/default credential if configured (**O4**) |
+| Runner offline | Run fails fast with a clear notice to the user in the chat ("{owner}'s computer is offline"). **No automatic fallback model** (**D1**) |
 | Slow / overloaded | Timeouts + 429 from gateway; bot message explains retry |
 | Mid-stream disconnect | Cancel run; partial assistant text follows existing partial-failure handling if any |
 | Model id unknown on device | `infer.error`; owner should refresh catalog |
@@ -279,6 +304,10 @@ V1 **does not** grant file/command/computer access. Computer sandbox stays on Ra
 - Consumers see "Requires {owner} online" / "Runs on publisher's hardware".
 - Depends on bot marketplace design; keep interfaces stable from M2.
 
+### M5+ — Device node app (long-term vision)
+
+- Installable Rakijazios app that bundles chat client + one-click local model + runner. See §13.
+
 Each milestone ships behind a feature flag / deployment setting so Host-002 can enable without exposing unfinished UI.
 
 ## 11. Open questions
@@ -288,11 +317,11 @@ Each milestone ships behind a feature flag / deployment setting so Host-002 can 
 | **O1** | Provider id + how the worker reaches the gateway | Custom `shared-local` fetch vs virtual HTTP URL on allowlisted host. SSRF rules make naïve `http://api:3100/...` problematic. |
 | **O2** | Multi-instance api sticky sessions | Single Host-002 replica is enough for M1–M2; Redis routing needed before HA. |
 | **O3** | Long-poll fallback | Implement only if real users hit WS blocks. |
-| **O4** | Automatic fallback model when offline | UX convenience vs surprising cloud bills. Default **off** for V1. |
+| **O4** | ~~Automatic fallback model when offline~~ | **Decided (D1):** no fallback; the reply fails with a clear notice. |
 | **O5** | Stream framing: SSE passthrough vs normalized JSON deltas | Passthrough is less work and matches openai-compatible clients. |
 | **O6** | Should `local` (deployment) and `shared-local` (per-user) share code? | Likely share OpenAI wire format helpers; keep catalog/auth separate. |
 | **O7** | Billing / fair use | V1 = owner's electricity; marketplace may need quotas or "bring your own runner". |
-| **O8** | Mobile runners | Out of scope; desktop OS first (Linux/macOS/Windows). |
+| **O8** | Mobile runners | Out of scope for V1; desktop OS first (Linux/macOS/Windows). Long-term view in §13. |
 
 ## 12. Non-goals (V1)
 
@@ -301,7 +330,68 @@ Each milestone ships behind a feature flag / deployment setting so Host-002 can 
 - Replacing OpenRouter / cloud providers.
 - Changing group-sharing ACLs beyond disclosing hardware location.
 
-## 13. References (code touchpoints)
+## 13. Vision: Rakijazios app as a device node (M5+)
+
+Status: **long-term vision**, not scheduled. Builds on the runner (M1–M3); nothing here changes V1.
+
+### 13.1 What the app is
+
+One installable **Rakijazios app** per device:
+
+- **Desktop:** Linux, Windows, macOS — e.g. Tauri or Electron wrapping the existing web UI.
+- **Mobile:** Android and iOS.
+
+The app combines three things:
+
+1. **Chat client** — the normal Rakijazios UI (groups, private chats, bots).
+2. **One-click local model** — bundled llama.cpp (or equivalent); the app picks a model that fits the
+   device's RAM/VRAM, downloads it and runs it. Quantisation, context size and ports stay hidden;
+   the user sees "Local model: ready".
+3. **The runner** — the same outbound-only runner from §4–§5, built in. It pairs the device with a
+   Rakijazios server and offers the local model to the user's bots.
+
+### 13.2 Devices as nodes, groups as an "army" of bots
+
+Each paired device becomes a **node** that runs its owner's bots. A group can then mix humans and bots
+whose replies are computed on different hardware: Alice's laptop bot, Bob's desktop GPU bot, the
+server's own local model and a cloud-key bot all in one conversation, each labelled with where it runs.
+
+"Pooling RAM" means **many bots on many devices collaborating in a group** (each bot a whole model on
+one device). It does **not** mean sharding one large model across devices over the internet:
+layer/tensor-parallel inference needs low-latency, high-bandwidth links, and over home connections it
+would be far too slow to be useful.
+
+### 13.3 Feasibility (realistic)
+
+| Platform | Role | Notes |
+|---|---|---|
+| Desktop (Linux/Windows/macOS) | Full node | Very feasible. llama.cpp runs well on CPU, Apple Silicon and consumer GPUs; the app can stay in the tray and keep the runner connected. |
+| Android | Chat client + light node | Only small models (≈1–4B quantised). Battery and thermal throttling; background execution is restricted, so serving only while the app is in the foreground (or charging, by user choice). |
+| iOS | Chat client + light node (foreground only) | Small models only; iOS suspends background apps, so the device can serve only while the app is open. Treat phones mainly as chat clients. |
+
+### 13.4 Security
+
+Same model as the runner (§7):
+
+- **Inference-only by default.** No files, shell, camera, contacts or computer access through the node.
+- **Explicit grants** for which bots/groups may use the device; owner limits, kill switch, revoke.
+- **Transparency:** consumers see "runs on {owner}'s {device}"; owners are told their model sees the
+  group messages it answers.
+- Outbound-only connection; no listening ports on the device.
+- Model files and the app itself must be integrity-checked (signed builds, checksummed model downloads).
+
+### 13.5 Open questions
+
+| Id | Question |
+|---|---|
+| **N1** | App framework: Tauri (small, Rust) vs Electron (mature, heavy) on desktop; native vs React Native / Capacitor on mobile. |
+| **N2** | Model distribution and licensing: which models may be bundled or auto-downloaded (license terms, attribution, acceptable-use flow-down), and where to host them. |
+| **N3** | Auto-updates for the app, the bundled inference engine and models (signing, rollbacks). |
+| **N4** | Store policies: Apple App Store / Google Play rules on downloading and executing models after install, app size, and background work. |
+| **N5** | NAT-free connectivity: outbound WSS from every device (as in §5); behaviour on flaky mobile networks and captive portals. |
+| **N6** | Node discovery and scheduling: how the server picks a device for a bot (owner preference, online status, capacity), and how groups behave when several nodes are offline (see **D1**: fail clearly, no silent fallback). |
+
+## 14. References (code touchpoints)
 
 - `packages/adapters/src/pi-openai-compatible-provider.ts` — runtime registration, hardened fetch  
 - `packages/adapters/src/openai-compatible-url.ts` — SSRF / private-host policy  
