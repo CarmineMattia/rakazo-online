@@ -226,17 +226,26 @@ RAKAZO_TEST_URL=http://127.0.0.1:5173 node tests/social-smoke.mjs
   revocation and stale-request rejection, lost membership, archived groups). Bot replies are
   simulated in that test. The owner's live browser was checked for group discovery, history and
   sharing controls.
+- **Group sharing, live end to end:** on the running stack, with two headless Chrome sessions (the
+  owner plus a second account, `rakazo.test2@example.com` / "Test Two"). The second account
+  redeemed a link invite into the owner's space. Before the grant it saw no groups. The owner then
+  used **Manage sharing → Share group**, and the member opened the group, saw the full history and
+  sent a message from the composer. `bot1` answered with a real model call (OpenRouter, billed to
+  the owner's configuration). Authors were correct on both sides. After **Revoke access**, the open
+  dialog cleared and disabled itself, and history, sends and group listing were refused (404 /
+  empty). This run found and fixed two display bugs: native owner messages were labelled
+  "Member", and shared messages repeated the stored `@Name: ` prompt prefix.
 
 ## Known limitations
 
 - **Email sender / domain.** Resend has no verified domain yet. With the test sender
   (`onboarding@resend.dev`), magic links are only delivered to the Resend account owner's address;
   other recipients are rejected. Real multi-user sign-up needs a verified domain and `EMAIL_FROM`.
-- **Group sharing not yet tested end to end** with a real second user in a browser and a real bot /
-  model reply. Acceptance of a link invite by a second browser account is also still unverified
-  (covered only by the API smoke test).
-- **Group sharing is in review** on branch `codex/fix-social-invites` (open PR) and not yet merged to
-  `main`.
+- Link-invite acceptance through the `/invite/…` **page** by a second browser account is still
+  unverified; the live end-to-end run redeemed the invite through the same API the page uses.
+- **Group sharing is on `main`.** A follow-up branch may land display fixes found by the live
+  end-to-end run (author labels for the owner's native messages, and stripping the stored
+  `@Name: ` prefix in the shared view).
 - **No password flow for magic-only users** yet (planned in Settings).
 
 ## Safety
@@ -256,8 +265,9 @@ Items below are **planned, not done**.
       overlay (`?v=sentfix1`) from `~/projects/rakazo` into this repo.
 - [x] Commit the group sharing work and open a PR from `codex/fix-social-invites` to `main`
       (merge still pending).
-- [ ] Test group sharing for real: a second user in a real browser, talking to a real bot with a
-      real model reply; also verify link-invite acceptance by a second browser account.
+- [x] Test group sharing for real: a second user in a real browser, talking to a real bot with a
+      real model reply.
+- [ ] Verify link-invite acceptance through the `/invite/…` page by a second browser account.
 - [ ] **Set password** flow in Settings for magic-only users (login and sign-up stay magic-link only).
 - [ ] Verified email domain for Resend and a matching `EMAIL_FROM`, so magic links reach every user.
 

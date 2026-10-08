@@ -93,12 +93,21 @@ export function mountGroupSharing(app: Hono, deps: SocialMountDeps & { events: T
         'SELECT message_id, name FROM group_message_authors WHERE message_id = ANY($1::text[])', rows.map(r => r.id),
       );
       const botNames = await tx.bot.findMany({ where: { id: { in: rows.flatMap(r => r.botId ? [r.botId] : []) }, spaceId: actor.spaceId }, select: { id: true, name: true } });
+      // Native group sends come only from the owner; shared sends carry an author row.
+      const owner = await tx.user.findUnique({ where: { id: group.userId }, select: { name: true } });
+      const ownerName = owner?.name?.trim() || 'Owner';
       const latestRun = await tx.run.findFirst({ where: { threadId: group.thread!.id }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], select: { status: true } });
       const active = await tx.run.findMany({ where: { threadId: group.thread!.id, status: { in: ['queued','leased','running','waiting_input','waiting_takeover'] } }, select: { status: true } });
-      return c.json({ name: group.name, messages: rows.reverse().map(row => ({ id: row.id, seq: row.seq,
-        role: row.role, author: authors.find(a => a.message_id === row.id)?.name || botNames.find(b => b.id === row.botId)?.name || (row.role === 'user' ? 'Member' : 'Bot'),
-        text: (Array.isArray(row.blocks) ? row.blocks : []).filter((b: any) => b?.kind === 'text').map((b: any) => b.text).join('\n'),
-      })), active: active.map(r => r.status), failed: latestRun?.status === 'failed' });
+      return c.json({ name: group.name, messages: rows.reverse().map(row => {
+        const sharedName = authors.find(a => a.message_id === row.id)?.name;
+        let text = (Array.isArray(row.blocks) ? row.blocks : []).filter((b: any) => b?.kind === 'text').map((b: any) => b.text).join('\n');
+        // The stored prompt keeps "@Name: " for the bots and the owner's native view;
+        // the shared view already shows the author label, so drop the duplicate prefix.
+        if (sharedName && text.startsWith(`@${sharedName}: `)) text = text.slice(sharedName.length + 3);
+        return { id: row.id, seq: row.seq, role: row.role,
+          author: sharedName || botNames.find(b => b.id === row.botId)?.name || (row.role === 'user' ? ownerName : 'Bot'),
+          text };
+      }), active: active.map(r => r.status), failed: latestRun?.status === 'failed' });
     });
   }));
   app.post('/api/group-sharing/groups/:id/messages', route(async c => {
