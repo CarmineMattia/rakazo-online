@@ -355,12 +355,13 @@ Items below are **planned, not done**.
       owner's desktop: bots only have their sandbox shell, and the runner only shares inference.
       Later, a bot could help fix problems on the owner's computer **through the runner**, but only
       when the owner opts in, and only safely:
-  - **Off by default**, enabled per device.
+  - **Two separate toggles**, each with its own icon: 🌐 **Browser** (open pages, click, type) and
+    🖥️ **Computer** (files and shell). Both are **off by default** and enabled per device **and** per bot.
   - The owner chooses which bots and groups may use it. Shared-group members never get it by default.
   - **Every** command or file action needs explicit approval from the owner, **on that device**.
     An allowlist or a read-only mode are options.
   - A full audit log, an instant kill switch and revocation. No silent background execution.
-  - A clear UI that says "this bot can act on {owner}'s computer".
+  - A clear UI and group badges, e.g. "can use {owner}'s browser".
   - A threat model covering prompt injection from group messages, exfiltration, privilege
     escalation, approval fatigue and a compromised server pushing commands. Inference stays
     separate from control.
