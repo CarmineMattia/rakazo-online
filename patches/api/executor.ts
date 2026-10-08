@@ -4008,10 +4008,16 @@ export function createRunExecutor(deps: ExecutorDeps) {
           if (!terminalCheckpointComplete) {
             await workspaceCheckpoint.flush().catch(() => undefined);
           }
-          const message = redactSecrets(
+          const rawMessage = redactSecrets(
             error instanceof Error ? error.message : String(error),
             runSecrets,
           );
+          // Rakijazios M1: a runner/gateway drop mid-answer gets the same readable
+          // notice as the offline preflight (D1) instead of a raw provider error.
+          const message =
+            runModelProvider === SHARED_LOCAL_PROVIDER_ID
+              ? ((await sharedLocalDropNotice(deps, run.userId, bot.name, rawMessage)) ?? rawMessage)
+              : rawMessage;
           const failed = await deps.events.finalizeRun({
             spaceId: run.spaceId,
             threadId: thread.id,
@@ -4656,6 +4662,48 @@ async function resolveModelKey(
   return { apiKey: deploymentKeyFor(deps, provider), redact: [] };
 }
 
+async function sharedLocalOwnerName(deps: ExecutorDeps, ownerUserId: string): Promise<string> {
+  const owner = await deps.prisma.user
+    .findUnique({ where: { id: ownerUserId }, select: { name: true } })
+    .catch(() => null);
+  return owner?.name?.trim() || "its owner";
+}
+
+function sharedLocalOfflineNotice(botName: string, ownerName: string): string {
+  return `${botName} runs on ${ownerName}'s computer, which is offline right now. Try again later.`;
+}
+
+/**
+ * Gateway/runner transport failures as they surface from the provider client:
+ * gateway JSON/SSE errors (`shared_local_*`, "Runner disconnected", hard
+ * timeout, offline notice) and a dropped worker→api connection (api restart:
+ * the OpenAI client reports "Connection error.", undici "terminated").
+ */
+const SHARED_LOCAL_DROP_PATTERN =
+  /shared_local_|runner disconnected|offline right now|inference hard timeout|local model http|\bterminated\b|fetch failed|socket hang up|econnreset|econnrefused|other side closed|\bconnection error\b/i;
+const SHARED_LOCAL_BUSY_PATTERN = /shared_local_busy|runner is busy/i;
+
+/** Classifies a failed shared-local run's raw error; null = not a transport failure. */
+export function classifySharedLocalFailure(rawMessage: string): "busy" | "offline" | null {
+  if (SHARED_LOCAL_BUSY_PATTERN.test(rawMessage)) return "busy";
+  if (SHARED_LOCAL_DROP_PATTERN.test(rawMessage)) return "offline";
+  return null;
+}
+
+async function sharedLocalDropNotice(
+  deps: ExecutorDeps,
+  ownerUserId: string,
+  botName: string,
+  rawMessage: string,
+): Promise<string | null> {
+  const kind = classifySharedLocalFailure(rawMessage);
+  if (!kind) return null;
+  const ownerName = await sharedLocalOwnerName(deps, ownerUserId);
+  return kind === "busy"
+    ? `${botName} runs on ${ownerName}'s computer, which is busy right now. Try again shortly.`
+    : sharedLocalOfflineNotice(botName, ownerName);
+}
+
 /**
  * Rakijazios M1 (decision D1): before a shared-local run starts, check that the
  * bot owner's runner is connected and offers the model. Returns a readable
@@ -4667,11 +4715,8 @@ async function sharedLocalSetupError(
   modelId: string,
   botName: string,
 ): Promise<string | null> {
-  const owner = await deps.prisma.user
-    .findUnique({ where: { id: ownerUserId }, select: { name: true } })
-    .catch(() => null);
-  const ownerName = owner?.name?.trim() || "its owner";
-  const offline = `${botName} runs on ${ownerName}'s computer, which is offline right now. Try again later.`;
+  const ownerName = await sharedLocalOwnerName(deps, ownerUserId);
+  const offline = sharedLocalOfflineNotice(botName, ownerName);
   if (!sharedLocalModelIds().includes(modelId)) {
     return `${botName} uses ${modelId}, which this server does not route to local runners.`;
   }

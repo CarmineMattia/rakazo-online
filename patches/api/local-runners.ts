@@ -454,7 +454,7 @@ export function createLocalRunnerGateway(deps: {
             if (p.error) {
               // Surface as SSE error then close — clients that already got
               // headers still need a terminal signal.
-              const errEvent = `data: ${JSON.stringify({ error: { message: p.error.message } })}\n\n`;
+              const errEvent = `data: ${JSON.stringify({ error: { message: p.error.message, type: "shared_local_disconnected" } })}\n\n`;
               controller.enqueue(encoder.encode(errEvent));
               controller.enqueue(encoder.encode("data: [DONE]\n\n"));
               controller.close();
