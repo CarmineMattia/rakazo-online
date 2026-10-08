@@ -60,3 +60,23 @@ test('sharing requires choosing a person and can be revoked',async()=>{
     [...f.doc.querySelectorAll('button')].find(b=>b.textContent==='Revoke access').click();await until(()=>grants.length===2);assert.deepEqual(grants[1],{userId:'colleague',shared:false});
   } finally { await f.close(); }
 });
+test('tool turns render readable activity, and members are not told to open the original',async()=>{
+  const history={name:'Team',active:[],messages:[
+    {id:'a',seq:1,author:'Alpha',text:'',activity:['Used tools: Shell · done in 3s']},
+    {id:'b',seq:2,author:'Alpha',text:'Here you go',activity:['Handed off to Beta']},
+    {id:'c',seq:3,author:'Beta',text:'',activity:[]},
+  ]};
+  for (const owned of [false,true]) {
+    const f=await fixture(async(path)=>path.endsWith('/groups')?response({groups:[{...group,owned}]}):response(history));
+    try {
+      [...f.doc.querySelectorAll('button')].find(b=>b.textContent==='Open').click();
+      await until(()=>f.doc.querySelectorAll('.rk-group-message').length===3);
+      const rows=[...f.doc.querySelectorAll('.rk-group-message')].map(r=>r.textContent);
+      assert.match(rows[0],/Used tools: Shell · done in 3s/);
+      assert.match(rows[1],/Here you go/);assert.match(rows[1],/Handed off to Beta/);
+      assert.equal(f.doc.body.textContent.includes('Non-text message'),false);
+      if(owned) assert.match(rows[2],/Open the group from your chat list/);
+      else { assert.match(rows[2],/No text in this turn\./); assert.equal(/open/i.test(rows[2]),false); }
+    } finally { await f.close(); }
+  }
+});

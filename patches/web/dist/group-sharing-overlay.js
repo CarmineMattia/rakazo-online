@@ -3,7 +3,7 @@
   const base = '/api/group-sharing/groups';
   let chat = null, timer = null, version = 0;
   const style = document.createElement('style');
-  style.textContent = `#rk-invite-root .rk-card{max-height:90vh;overflow:auto}.rk-group-row{display:flex;gap:8px;align-items:center;margin:8px 0}.rk-group-row span{flex:1}.rk-group-hint{font-size:12px;color:#aaa}#rk-group-dialog{position:fixed;inset:0;z-index:100005;background:#0009;display:flex;align-items:center;justify-content:center;padding:16px;color:#eee;font:14px/1.45 system-ui}#rk-group-dialog .rk-group-card{background:#171719;border:1px solid #38383d;border-radius:16px;padding:20px;width:min(720px,100%);max-height:90vh;display:flex;flex-direction:column;gap:12px}#rk-group-dialog button{border:1px solid #555;border-radius:10px;background:#29292d;color:#eee;padding:8px 12px;cursor:pointer}#rk-group-dialog button:disabled{opacity:.5;cursor:default}#rk-group-dialog h2,#rk-group-dialog p{margin:0}#rk-group-dialog .rk-group-history{overflow:auto;min-height:100px;flex:1;max-height:55vh}.rk-group-message{padding:10px 12px;margin:8px 0;background:#252529;border-radius:12px;white-space:pre-wrap;overflow-wrap:anywhere}.rk-group-message strong{display:block;color:#6cd8bd;font-size:12px;margin-bottom:5px}#rk-group-dialog form{display:flex;gap:8px}#rk-group-dialog textarea{flex:1;min-width:0;background:#111;color:#eee;border:1px solid #555;border-radius:10px;padding:10px;resize:vertical}#rk-group-dialog [role=status]{color:#bbb;font-size:12px}#rk-group-dialog [role=alert]{color:#fca5a5}`;
+  style.textContent = `.rk-group-activity{font-size:12px;color:#aaa;font-style:italic}#rk-invite-root .rk-card{max-height:90vh;overflow:auto}.rk-group-row{display:flex;gap:8px;align-items:center;margin:8px 0}.rk-group-row span{flex:1}.rk-group-hint{font-size:12px;color:#aaa}#rk-group-dialog{position:fixed;inset:0;z-index:100005;background:#0009;display:flex;align-items:center;justify-content:center;padding:16px;color:#eee;font:14px/1.45 system-ui}#rk-group-dialog .rk-group-card{background:#171719;border:1px solid #38383d;border-radius:16px;padding:20px;width:min(720px,100%);max-height:90vh;display:flex;flex-direction:column;gap:12px}#rk-group-dialog button{border:1px solid #555;border-radius:10px;background:#29292d;color:#eee;padding:8px 12px;cursor:pointer}#rk-group-dialog button:disabled{opacity:.5;cursor:default}#rk-group-dialog h2,#rk-group-dialog p{margin:0}#rk-group-dialog .rk-group-history{overflow:auto;min-height:100px;flex:1;max-height:55vh}.rk-group-message{padding:10px 12px;margin:8px 0;background:#252529;border-radius:12px;white-space:pre-wrap;overflow-wrap:anywhere}.rk-group-message strong{display:block;color:#6cd8bd;font-size:12px;margin-bottom:5px}#rk-group-dialog form{display:flex;gap:8px}#rk-group-dialog textarea{flex:1;min-width:0;background:#111;color:#eee;border:1px solid #555;border-radius:10px;padding:10px;resize:vertical}#rk-group-dialog [role=status]{color:#bbb;font-size:12px}#rk-group-dialog [role=alert]{color:#fca5a5}`;
   document.head.appendChild(style);
   function el(tag, text, props = {}) { const node = document.createElement(tag); if (text) node.textContent = text; Object.assign(node, props); return node; }
   async function api(path, body) {
@@ -70,7 +70,15 @@
         if (signature !== next) {
           const atBottom = history.scrollHeight - history.scrollTop - history.clientHeight < 80;
           history.replaceChildren();
-          for (const message of messages) { const row = el('div', '', { className: 'rk-group-message' }); row.append(el('strong', message.author), el('div', message.text || '(Non-text message — open the original group for details)')); history.append(row); }
+          for (const message of messages) {
+            const row = el('div', '', { className: 'rk-group-message' }); row.append(el('strong', message.author));
+            const activity = Array.isArray(message.activity) ? message.activity : [];
+            if (message.text) row.append(el('div', message.text));
+            for (const line of activity) row.append(el('div', line, { className: 'rk-group-activity' }));
+            // Only the owner can open the original group; members just get a neutral note.
+            if (!message.text && !activity.length) row.append(el('div', group.owned ? 'No text in this turn. Open the group from your chat list for details.' : 'No text in this turn.', { className: 'rk-group-activity' }));
+            history.append(row);
+          }
           if (atBottom || !signature) history.scrollTop = history.scrollHeight;
           signature = next;
         }
