@@ -1,6 +1,6 @@
 # Share your local AI — technical design
 
-Status: **design only** (not implemented).  
+Status: **M1 implemented** (owner-only, same-host prototype; see §10 → M1 as built). M2+ is design only.  
 Related roadmap: README → Roadmap → Share your local AI / Bot marketplace / Device node app (M5).  
 Audience: implementers of `rakazo-online` overlays and any future upstream contribution.
 
@@ -284,6 +284,76 @@ V1 **does not** grant file/command/computer access. Computer sandbox stays on Ra
 - No pairing UI yet: seed device token via CLI against the operator account.
 - **Tests:** unit protocol codec; integration with Ollama on Host-002; one headless chat producing a real reply through the runner (not direct `host.docker.internal`).
 - **Success:** `Chief` or a clone answers via runner while tcpdump shows no inbound port to the runner.
+
+#### M1 as built (2026-10-08)
+
+Answer to **O1**: a dedicated provider id **`shared-local`** whose base URL is an
+operator-configured internal URL (`RAKAZO_SHARED_LOCAL_GATEWAY_URL`, default
+`http://api:3100/api/local-runners/v1`). It uses pi-ai's normal OpenAI-completions client, at the
+same trust level as the operator's `RAKAZO_LOCAL_MODELS_URL`. The `openai-compatible` URL policy and
+hardened fetch are **unchanged** (user-supplied URLs still go through them).
+
+```mermaid
+sequenceDiagram
+  participant W as worker (pi runtime)
+  participant G as api gateway
+  participant R as runner (owner PC)
+  participant O as Ollama 127.0.0.1:11434
+  R->>G: WS /api/local-runners/ws (outbound) hello{deviceId, token}
+  G-->>R: policy{maxInFlight, hardTimeoutMs}
+  W->>G: GET /v1/models (preflight, Bearer sl1 token)
+  W->>G: POST /v1/chat/completions (Bearer sl1 token)
+  G->>R: infer.request{id, model, body}
+  R->>O: POST /v1/chat/completions stream=true
+  O-->>R: SSE
+  R-->>G: infer.chunk… infer.done
+  G-->>W: SSE (OpenAI format)
+```
+
+| Piece | File (repo) | Mounted at |
+|---|---|---|
+| Runner (Node 22, no deps) | `runner/src/{index,client,protocol,loopback}.ts`, `runner/scripts/{start,stop}.sh` | host process |
+| Gateway: WS sessions, device auth, SSE proxy, `local_runner_devices` (idempotent `CREATE TABLE IF NOT EXISTS`) | `patches/api/local-runners.ts` | `apps/api/src/local-runners.ts` |
+| WS upgrade hook | `patches/api/index.ts`, `patches/api/app.ts` (`attachLocalRunnerUpgrade`) | `apps/api/src/` |
+| Device token seed CLI | `patches/api/local-runner-seed.ts` | `apps/api/src/` |
+| Run token (HMAC) + env helpers | `patches/api/shared-local-token.ts` | `apps/api/src/` **and** `packages/adapters/src/` |
+| Provider registration | `patches/api/pi-local-provider.ts` (`registerSharedLocalProvider`, called from `registerLocalProvider`) | `packages/adapters/src/` |
+| Hidden from UI catalog | `patches/api/pi-models.ts` (skips `shared-local` in `listPiCatalog`) | `packages/adapters/src/` |
+| Model selection (no silent fallback) | `patches/api/model-selection.ts` (a `shared-local` bot override always wins) | `packages/adapters/src/` |
+| Run token + offline notice | `patches/api/executor.ts` (`resolveModelKey` mints the token; `sharedLocalSetupError` preflight) | `packages/adapters/src/` |
+
+Auth, two separate secrets:
+
+- **Device token** (runner → gateway): 32 random bytes, stored only as `sha256` in
+  `local_runner_devices.token_hash`; sent in the first `hello` frame (not in the URL).
+- **Run token** (worker → gateway): `sl1.<ownerUserId>.<exp>.<hmac>`, minted per run by the worker
+  and bound to `run.userId` (always the bot owner). Its HMAC key is derived from `ENCRYPTION_KEY` with
+  a fixed label; the worker deliberately has no `BETTER_AUTH_SECRET`. TTL is 1 h and the token is added to run-secret
+  redaction. The gateway only routes it to **that user's** runner, so M1 is owner-only by
+  construction. Cookie sessions are not accepted on `/api/local-runners/v1/*`.
+
+D1 behaviour: before the run starts, the worker asks the gateway for `/models`. If the owner's runner
+is offline (or does not offer the model), the run fails with
+*"{Bot} runs on {owner}'s computer, which is offline right now. Try again later."*, with no retry and
+no fallback. If the runner drops mid-stream, the provider error is shown instead (same text, as a 503/SSE error).
+
+Limits in M1: 1 active session per user (a new hello replaces the old one), max 2 in-flight
+requests per device (then 429), 10 min hard cap per request, 45 s heartbeat miss. The client abort
+propagates as `infer.cancel`.
+
+Enabling it for a bot is operator-only in M1 (no UI). The router rejects `shared-local` in
+`bots.update` ("Connect that model provider first"):
+
+```sql
+UPDATE bots SET "modelProvider"='shared-local', "modelId"='gemma4:26b-a4b-it-q4_K_M'
+WHERE id='<bot id>' AND "userId"='<owner id>';
+```
+
+Known M1 limits: the runner dials the api port directly (`ws://127.0.0.1:3100`, because the vite
+preview proxy on :5173 is not configured for WS); there is no pairing, grants or usage accounting yet;
+and the gateway is single-instance (in-memory sessions, **O2**). A shared-local bot added to a shared
+group would use the owner's runner for every member's message. **Don't add shared-local bots to
+shared groups until M2 grants exist.** Runs longer than 1 h would outlive the run token.
 
 ### M2 — Pairing UI + grants
 
