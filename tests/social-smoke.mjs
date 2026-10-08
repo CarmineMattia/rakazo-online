@@ -34,6 +34,14 @@ try {
     actor.token = login.token;
   }
   const [a, b] = actors;
+  // Keep B's original space invite before either account joins another space.
+  const linkInvite = await ok('/api/space-invites', b, {});
+  assert(linkInvite.token && linkInvite.spaceId);
+  const preview = await ok(`/api/space-invites/preview/${linkInvite.token}`);
+  assert.equal(preview.spaceId, linkInvite.spaceId);
+  assert.equal(preview.targeted, false);
+  assert.equal((await request('/api/space-invites/redeem', null, { token: linkInvite.token })).status, 401);
+  assert.equal((await request('/api/space-invites/redeem', b, { token: linkInvite.token })).status, 400);
   const search = await ok(`/api/users/search?q=${encodeURIComponent('@' + b.name)}`, a);
   assert(search.users.some(user => user.userId === b.id && user.email === null));
   const invitation = await ok('/api/space-invites/direct', a, { userId: b.id });
@@ -52,7 +60,15 @@ try {
   assert(members.people.some(user => user.userId === a.id));
   assert(members.people.some(user => user.userId === b.id));
   assert.equal((await ok('/api/space-invites/received', b)).invites.length, 0);
-  console.log('PASS: signup, password login, private search, direct invite, duplicate invite, recipient acceptance, membership and idempotent retry');
+  const linkAccepted = await ok('/api/space-invites/redeem', a, { token: linkInvite.token });
+  assert.equal(linkAccepted.spaceId, linkInvite.spaceId);
+  const linkAgain = await ok('/api/space-invites/redeem', a, { token: linkInvite.token });
+  assert.equal(linkAgain.spaceId, linkAccepted.spaceId);
+  assert.equal((await request(`/api/space-invites/preview/${linkInvite.token}`)).status, 410);
+  const linkMembers = await ok('/api/space-members', a, undefined, { 'x-rakazo-space-id': linkAccepted.spaceId });
+  assert.equal(linkMembers.people.filter(user => user.userId === a.id).length, 1);
+  assert.equal(linkMembers.people.filter(user => user.userId === b.id).length, 1);
+  console.log('PASS: signup, password login, private search, direct invite, duplicate invite, recipient acceptance, membership, link preview, link acceptance, used-link rejection and idempotent retry');
 } finally {
   // Only deletes disposable accounts created by this run, using their own credentials.
   for (const actor of actors.reverse()) {

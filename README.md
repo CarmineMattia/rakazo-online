@@ -113,7 +113,10 @@ executes the lock without deserializing its result.
 
 Four helper tests and a live two-account API check passed: signup, password sign-in, username
 search without exposing email, targeted invite, duplicate invite protection, acceptance,
-shared-space membership and repeated acceptance. The API check removes the accounts it creates.
+shared-space membership and repeated acceptance. The check also covers ordinary link invitations:
+public preview, unauthenticated and self-acceptance rejection, recipient acceptance, repeated
+acceptance without duplicate members and rejection of an already-used preview. The API check
+removes the accounts it creates.
 
 With a local stack running and registrations open, reproduce it with:
 
@@ -142,7 +145,10 @@ origin, including protection against protocol-relative and backslash host change
 Three DOM tests passed for login destinations, registration destinations and unsafe redirects.
 In the running browser, switching from sign-in to sign-up and back preserved the invitation.
 The Share panel text now states the actual ownership behavior instead of promising shared bots.
-Full email delivery and signed-in invitation acceptance have not yet been verified in the browser.
+Email delivery and magic-link browser sign-in were confirmed by the user. In the signed-in
+browser, Share lists current members, creates an invitation, reports successful copying and
+opens a valid preview with the inviter and space name. Acceptance by a second browser account
+is not yet verified; the API acceptance checks below cover disposable accounts.
 
 Run `node --test tests/auth-invite-navigation.test.mjs` in an environment with `jsdom` installed.
 `RAKAZO_JSDOM_PATH` can point to an existing jsdom package and `RAKAZO_AUTH_OVERLAY` to the overlay
@@ -159,7 +165,7 @@ applied to the tracked overlay and the local mounted runtime.
 The three auth DOM tests now use a required password fixture, assert native form validity and
 submit with `requestSubmit()` instead of bypassing browser validation. All passed. The running
 browser also confirmed the password is disabled and optional. SMTP and sender are configured;
-actual inbox delivery still requires a user retry after refreshing the page.
+the user subsequently confirmed inbox delivery and completed magic-link sign-in in the browser.
 
 ## Safety
 
