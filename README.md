@@ -8,6 +8,9 @@ Upstream app images still come from the published Rakazo stack. This repository 
 patches and overlays** (API, auth, contracts, supervisor, web `dist` UI, computer image) plus the
 Compose helpers, so we can evolve the social features without waiting on upstream.
 
+The deployment is branded **Rakijazio's**: page title, PWA manifest, Welcome screen, translated UI
+strings, auth email subjects/bodies and the email sender name.
+
 **Contents**
 
 - [Features](#features)
@@ -27,8 +30,10 @@ Compose helpers, so we can evolve the social features without waiting on upstrea
   no longer `required`, so native form validation cannot block submission. Existing accounts
   (including former password users) always receive a link. Setting a password is meant to happen
   later, from Settings, after registration (not built yet; see [Roadmap](#roadmap)).
-- After **Send magic link** the user sees a clear "check your email" state; SMTP failures are
-  surfaced instead of failing silently.
+- After **Send magic link** the button shows "Sending magic link…", then a clear "check your
+  email" panel with **Try again** / **Back to sign in**. The sent state is kept in
+  `sessionStorage` (15 minutes) so React remounts do not wipe it. SMTP failures are surfaced
+  instead of failing silently.
 - Magic-link verify URLs and every `callbackURL*` parameter are forced onto one origin.
 - Heavy DOM observers are skipped on `/sign-in`, `/sign-up` and `/forgot-password` (fixes a login
   freeze).
@@ -125,7 +130,8 @@ Web UI on `:5173`, API on `:3100`. Services: web, api, worker, supervisor, postg
 - **This checkout is not the running stack.** The live containers on Host-002 bind-mount
   `/home/cr1m3/projects/rakazo/patches`. Changes are copied there and the affected service is
   restarted. Check the mounts before applying changes; editing this repo alone does not update the
-  running stack. See [Known limitations](#known-limitations) for current drift.
+  running stack. As of 2026-10-08 the runtime patch files tracked here match the live stack
+  (the live tree also keeps local-only `dist.broken/` and `stock-dist/` copies, not tracked).
 
 ## API surface
 
@@ -229,10 +235,7 @@ RAKAZO_TEST_URL=http://127.0.0.1:5173 node tests/social-smoke.mjs
 - **Group sharing not yet tested end to end** with a real second user in a browser and a real bot /
   model reply. Acceptance of a link invite by a second browser account is also still unverified
   (covered only by the API smoke test).
-- **Runtime drift.** The live `~/projects/rakazo` stack has changes not yet in this repo: the
-  **Rakijazio** rebrand (e.g. page title) and a newer magic-auth overlay loaded as
-  `magic-auth-overlay.js?v=sentfix1` (improved "link sent" state).
-- **Group sharing work is uncommitted** on branch `codex/fix-social-invites` and not yet merged to
+- **Group sharing is in review** on branch `codex/fix-social-invites` (open PR) and not yet merged to
   `main`.
 - **No password flow for magic-only users** yet (planned in Settings).
 
@@ -249,9 +252,10 @@ Items below are **planned, not done**.
 
 ### Next steps
 
-- [ ] Bring the live runtime back in sync: move the **Rakijazio** rebrand and the newer magic-auth
+- [x] Bring the live runtime back in sync: move the **Rakijazio's** rebrand and the newer magic-auth
       overlay (`?v=sentfix1`) from `~/projects/rakazo` into this repo.
-- [ ] Commit the group sharing work and open a PR from `codex/fix-social-invites` to `main`.
+- [x] Commit the group sharing work and open a PR from `codex/fix-social-invites` to `main`
+      (merge still pending).
 - [ ] Test group sharing for real: a second user in a real browser, talking to a real bot with a
       real model reply; also verify link-invite acceptance by a second browser account.
 - [ ] **Set password** flow in Settings for magic-only users (login and sign-up stay magic-link only).
