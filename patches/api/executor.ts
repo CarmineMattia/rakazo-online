@@ -39,6 +39,12 @@ import {
 } from "@rakazo/contracts";
 import { LOCAL_PROVIDER_ID } from "./pi-local-provider.js";
 import {
+  mintSharedLocalToken,
+  SHARED_LOCAL_PROVIDER_ID,
+  sharedLocalGatewayBaseUrl,
+  sharedLocalModelIds,
+} from "./shared-local-token.js";
+import {
   type ActionApprovalRule,
   appendTextSegment,
   appendToolCallSegment,
@@ -1313,7 +1319,14 @@ export function createRunExecutor(deps: ExecutorDeps) {
         const { credential, thinkingLevel } = selected;
         const runModelProvider = selected.provider ?? runtimeFallback?.provider;
         const runModelId = selected.id ?? runtimeFallback?.id;
-        if (!runModelProvider || !runModelId) {
+        // Rakijazios M1: a shared-local bot whose owner runner is offline fails
+        // here with a readable notice (D1) instead of retrying or falling back.
+        const sharedLocalError =
+          runModelProvider === SHARED_LOCAL_PROVIDER_ID && runModelId
+            ? await sharedLocalSetupError(deps, run.userId, runModelId, bot.name)
+            : null;
+        if (!runModelProvider || !runModelId || sharedLocalError) {
+          const setupError = sharedLocalError ?? MISSING_MODEL_MESSAGE;
           const failed = await deps.events.finalizeRun({
             spaceId: run.spaceId,
             threadId: thread.id,
@@ -1324,7 +1337,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             leaseOwner: workerId,
             leaseFence: fence,
             outcome: "failed",
-            error: MISSING_MODEL_MESSAGE,
+            error: setupError,
           });
           if (!failed) return;
           if (failed.continuationRunId) {
@@ -1337,7 +1350,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               deps,
               { ...run, sourceMessageId: run.sourceMessageId },
               { id: bot.id, name: bot.name },
-              `Could not complete the delegated request: ${MISSING_MODEL_MESSAGE}`,
+              `Could not complete the delegated request: ${setupError}`,
               "status",
             ).catch((error) => getLogger().error("bot message failure return", error));
           }
@@ -1345,7 +1358,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             await notifyRun(deps, run, {
               kind: "failure",
               title: `${bot.name} failed`,
-              body: MISSING_MODEL_MESSAGE,
+              body: setupError,
               botId: bot.id,
               threadId: thread.id,
             });
@@ -4628,7 +4641,60 @@ async function resolveModelKey(
   if (provider === LOCAL_PROVIDER_ID) {
     return { apiKey: "local", redact: [] };
   }
+  if (provider === SHARED_LOCAL_PROVIDER_ID) {
+    // Rakijazios M1: route through the api gateway to the owner's runner.
+    // The bearer is a short-lived HMAC bound to run.userId (the bot owner),
+    // never a user-supplied key, and only valid at the gateway.
+    if (!sharedLocalModelIds().includes(modelId)) {
+      throw new Error(
+        `Model "${modelId}" is not offered by the shared-local gateway on this server.`,
+      );
+    }
+    const token = mintSharedLocalToken(userId, 60 * 60);
+    return { apiKey: token, redact: [token] };
+  }
   return { apiKey: deploymentKeyFor(deps, provider), redact: [] };
+}
+
+/**
+ * Rakijazios M1 (decision D1): before a shared-local run starts, check that the
+ * bot owner's runner is connected and offers the model. Returns a readable
+ * notice for the chat when it is not; never falls back to another model.
+ */
+async function sharedLocalSetupError(
+  deps: ExecutorDeps,
+  ownerUserId: string,
+  modelId: string,
+  botName: string,
+): Promise<string | null> {
+  const owner = await deps.prisma.user
+    .findUnique({ where: { id: ownerUserId }, select: { name: true } })
+    .catch(() => null);
+  const ownerName = owner?.name?.trim() || "its owner";
+  const offline = `${botName} runs on ${ownerName}'s computer, which is offline right now. Try again later.`;
+  if (!sharedLocalModelIds().includes(modelId)) {
+    return `${botName} uses ${modelId}, which this server does not route to local runners.`;
+  }
+  let response: Response;
+  try {
+    response = await fetch(`${sharedLocalGatewayBaseUrl()}/models`, {
+      headers: { authorization: `Bearer ${mintSharedLocalToken(ownerUserId, 60)}` },
+      signal: AbortSignal.timeout(5_000),
+    });
+  } catch {
+    return offline;
+  }
+  if (response.status === 503) return offline;
+  if (!response.ok) {
+    return `${botName} could not reach ${ownerName}'s computer (gateway HTTP ${response.status}). Try again later.`;
+  }
+  const listed = (await response.json().catch(() => null)) as {
+    data?: Array<{ id?: unknown }>;
+  } | null;
+  if (!listed?.data?.some((model) => model.id === modelId)) {
+    return `${botName} uses ${modelId}, which ${ownerName}'s computer is not offering right now.`;
+  }
+  return null;
 }
 
 async function withModelCredentialLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
