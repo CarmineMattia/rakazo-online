@@ -535,7 +535,7 @@ export async function createApp(
   });
   mountLocalSettings(app, { token: env.desktopStackToken, prisma, rpc });
   mountSocialRoutes(app, { prisma, auth, sessionHeaders });
-  mountSpaceInvites(app, { prisma, auth, sessionHeaders });
+  mountSpaceInvites(app, { prisma, auth, sessionHeaders, webOrigin: env.webOrigin });
   mountGroupSharing(app, { prisma, auth, sessionHeaders, events, jobs });
   mountComputerSettings(app, {
     prisma,

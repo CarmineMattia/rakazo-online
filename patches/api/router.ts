@@ -4808,6 +4808,27 @@ async function spaceNavigationDto(
   ]);
   const currentMembership = memberships.find((membership) => membership.spaceId === actor.spaceId);
   if (!currentMembership) throw new IsolationError();
+  // Display-only: joined spaces often share a name with the member's own default
+  // space ("Personal"), so label spaces the actor doesn't own with the owner's name.
+  const joinedSpaceIds = memberships
+    .filter((membership) => membership.role !== "owner")
+    .map((membership) => membership.spaceId);
+  const joinedOwners = joinedSpaceIds.length
+    ? await deps.prisma.spaceMember.findMany({
+        where: { spaceId: { in: joinedSpaceIds }, role: "owner" },
+        select: { spaceId: true, member: { select: { user: { select: { name: true } } } } },
+        orderBy: { createdAt: "asc" },
+      })
+    : [];
+  const ownerNameBySpace = new Map<string, string>();
+  for (const row of joinedOwners) {
+    const ownerName = row.member.user.name?.trim();
+    if (ownerName && !ownerNameBySpace.has(row.spaceId)) ownerNameBySpace.set(row.spaceId, ownerName);
+  }
+  const displaySpaceName = (spaceId: string, name: string) => {
+    const ownerName = ownerNameBySpace.get(spaceId);
+    return ownerName ? `${name} · ${ownerName}` : name;
+  };
   const botsBySpace = partitionBySpace([...currentBots, ...inactiveBots]);
   const groupsBySpace = partitionBySpace([...currentGroups, ...inactiveGroups]);
   const sectionsBySpace = partitionBySpace(botSections);
@@ -4819,7 +4840,7 @@ async function spaceNavigationDto(
   return {
     current: {
       id: actor.spaceId,
-      name: currentMembership.space.name,
+      name: displaySpaceName(actor.spaceId, currentMembership.space.name),
       bots: currentBots,
       groups: currentGroups,
       externalConversations: externalConversations.filter(
@@ -4832,7 +4853,7 @@ async function spaceNavigationDto(
       const spaceGroups = groupsFor(membership.spaceId);
       return {
         id: membership.spaceId,
-        name: membership.space.name,
+        name: displaySpaceName(membership.spaceId, membership.space.name),
         isDefault: membership.space.isDefault,
         hasContent: spacesWithContent.has(membership.spaceId),
         canDelete:
