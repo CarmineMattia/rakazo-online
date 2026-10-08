@@ -65,6 +65,11 @@ describe("social profile and discovery helpers", () => {
         membership: "invited",
       }),
     ]);
+    expect(findManyUsers).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        email: { not: { endsWith: "@messaging.invalid" }, mode: "insensitive" },
+      }),
+    }));
     expect(findManyUsers).toHaveBeenCalledWith(expect.objectContaining({ take: 20 }));
   });
 });

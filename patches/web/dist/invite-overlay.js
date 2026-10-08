@@ -73,7 +73,7 @@
     return `
       <div class="rk-card" role="dialog" aria-modal="true" aria-labelledby="rk-invite-title">
         <h2 id="rk-invite-title">People & invites</h2>
-        <p>Share a link so a colleague can join this space and see the same bots.</p>
+        <p>Invite a colleague to join this space. Chats stay private until you explicitly share a group.</p>
         <div class="rk-row">
           <button type="button" class="rk-primary" data-rk="create">Invite colleague</button>
           <button type="button" data-rk="copy" disabled>Copy link</button>
@@ -267,7 +267,7 @@
           actions.innerHTML = "";
           const login = document.createElement("a");
           login.className = "rk-btn rk-primary";
-          login.href = `/?next=${encodeURIComponent(location.pathname)}`;
+          login.href = `/sign-in?next=${encodeURIComponent(location.pathname)}`;
           login.textContent = "Sign in";
           actions.appendChild(login);
         } else {

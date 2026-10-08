@@ -39,6 +39,7 @@ import {
 } from "./artifacts.js";
 import { resolveBusyBotName, toComputerStatus } from "./computer-status.js";
 import { withSerializableRetry } from "./serializable-retry.js";
+import { requireGroupAccess } from "./group-access.js";
 import { loadMessagePage } from "./thread-message-pages.js";
 
 export type ThreadTarget =
@@ -55,6 +56,7 @@ export type ThreadTarget =
       groupName: string;
       members: GroupMember[];
       memberBotIds: string[];
+      sharedRequester?: Actor;
     };
 
 const THREAD_MESSAGE_PAGE_SIZE = 100;
@@ -238,6 +240,7 @@ async function lockAndLoadGroupMembers(
   target: Extract<ThreadTarget, { kind: "group" }>,
 ) {
   await lockOwnedGroup(tx, actor, target.groupId);
+  if (target.sharedRequester) await requireGroupAccess(tx, target.sharedRequester, target.groupId);
   const group = await tx.chatGroup.findFirst({
     where: {
       id: target.groupId,
@@ -590,7 +593,13 @@ export async function sendThreadMessage(
     clientNonce?: string;
   },
 ) {
-  const existing = await replayExistingSend(deps, target.threadId, input.clientNonce);
+  const existing = target.kind === "group" && target.sharedRequester
+    ? await deps.prisma.$transaction(async tx => {
+        await lockOwnedGroup(tx, actor, target.groupId);
+        await requireGroupAccess(tx, target.sharedRequester!, target.groupId);
+        return replayExistingSend({ ...deps, prisma: tx as PrismaClient }, target.threadId, input.clientNonce);
+      })
+    : await replayExistingSend(deps, target.threadId, input.clientNonce);
   if (existing) return existing;
 
   const commit = () =>
@@ -710,6 +719,10 @@ export async function sendThreadMessage(
       }
 
       const members = await lockAndLoadGroupMembers(tx, actor, target);
+      const sharedAuthor = target.sharedRequester
+        ? await tx.user.findUniqueOrThrow({ where: { id: target.sharedRequester.userId }, select: { name: true } })
+        : null;
+      const groupText = sharedAuthor ? `@${sharedAuthor.name}: ${input.text ?? ""}` : input.text;
       const memberBotIds = members.map((member) => member.botId);
       const mentionTargets = splitMentionTargets(input.mentions);
       const targetBotIds = resolveGroupTargetBotIds({
@@ -729,7 +742,7 @@ export async function sendThreadMessage(
         actor,
         mentionTargets.connectorMentionIds,
       );
-      const blocks = buildUserMessageBlocks(input.text, attachmentBlocks);
+      const blocks = buildUserMessageBlocks(groupText, attachmentBlocks);
       const message = await createThreadMessageInTransaction(tx, {
         threadId: target.threadId,
         role: "user",
@@ -737,6 +750,12 @@ export async function sendThreadMessage(
         replyToMessageId: input.replyToMessageId,
         clientNonce: input.clientNonce,
       });
+      if (target.sharedRequester && sharedAuthor) {
+        await tx.$executeRawUnsafe(
+          'INSERT INTO group_message_authors (message_id, user_id, name) VALUES ($1, $2, $3)',
+          message.id, target.sharedRequester.userId, sharedAuthor.name,
+        );
+      }
       const activeRuns = await tx.run.findMany({
         where: {
           threadId: target.threadId,
@@ -770,7 +789,7 @@ export async function sendThreadMessage(
             botId,
             threadId: target.threadId,
             userId: actor.userId,
-            prompt: buildSendPrompt(input.text, artifacts, connectorNames),
+            prompt: buildSendPrompt(groupText, artifacts, connectorNames),
             status: "queued",
           },
         });
@@ -822,6 +841,7 @@ export async function sendThreadMessage(
     });
 
   const committed = await withSerializableRetry(commit).catch(async (error) => {
+    if (target.kind === "group" && target.sharedRequester) throw error;
     const winner = await replayExistingSend(deps, target.threadId, input.clientNonce);
     if (winner) return { replay: winner } as const;
     throw error;

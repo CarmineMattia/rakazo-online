@@ -9,6 +9,7 @@
   let lastSignature = "";
   let formBound = false;
   let debounceTimer = 0;
+  const SENT_KEY = "rk.magicLinkSent";
 
   function isAuthPath() {
     return AUTH_PATHS.has(location.pathname);
@@ -68,13 +69,48 @@
       body.rk-auth-signup label[for="name"]{display:revert !important}
       .rk-handle-hint{margin:.15rem 0 .55rem;font-size:12px;color:var(--muted-foreground,#a1a1aa)}
       .rk-existing-banner{margin:0 0 .85rem;padding:.75rem .9rem;border-radius:12px;border:1px solid color-mix(in oklab,#3ec5a8 45%,transparent);background:rgba(62,197,168,.12);color:var(--foreground,#f4f4f5);font:13px/1.4 ui-sans-serif,system-ui,sans-serif}
+      .rk-sending{opacity:.85;pointer-events:none}
+      .rk-sending button[type="submit"]{opacity:.7}
     `;
     document.documentElement.appendChild(style);
   }
 
   function findAuthForm() {
+    const sent = document.querySelector(`form[data-rk-showing-sent="1"]`);
+    if (sent) return sent;
     const email = document.querySelector('form input#email, form input[name="email"]');
     return email ? email.closest("form") : null;
+  }
+
+  function readSentState() {
+    try {
+      const raw = sessionStorage.getItem(SENT_KEY);
+      if (!raw) return null;
+      const data = JSON.parse(raw);
+      if (!data?.email || !data?.path) return null;
+      if (Date.now() - Number(data.at || 0) > 15 * 60 * 1000) {
+        sessionStorage.removeItem(SENT_KEY);
+        return null;
+      }
+      return data;
+    } catch {
+      return null;
+    }
+  }
+
+  function writeSentState(email) {
+    try {
+      sessionStorage.setItem(
+        SENT_KEY,
+        JSON.stringify({ email, path: location.pathname, at: Date.now() }),
+      );
+    } catch {}
+  }
+
+  function clearSentState() {
+    try {
+      sessionStorage.removeItem(SENT_KEY);
+    } catch {}
   }
 
   function wrapPasswordFields(form) {
@@ -82,6 +118,9 @@
       'input#current-password, input#new-password, input[name="password"], input[type="password"]',
     );
     if (!password) return;
+    // Hidden upstream password controls must not block native form validation.
+    if (password.required) password.required = false;
+    if (!password.disabled) password.disabled = true;
     let wrap = password.closest("[data-rk-password-wrap]");
     if (wrap) return;
     wrap = password.parentElement;
@@ -184,15 +223,27 @@
     setSubmitLabel(form, "Send magic link");
   }
 
+  function returnPath() {
+    const next = new URLSearchParams(location.search).get("next");
+    if (!next || !next.startsWith("/")) return null;
+    try {
+      const url = new URL(next, location.origin);
+      return url.origin === location.origin ? `${url.pathname}${url.search}${url.hash}` : null;
+    } catch (_) { return null; }
+  }
+
+  function authPath(path) {
+    const next = returnPath();
+    return next ? `${path}${path.includes("?") ? "&" : "?"}next=${encodeURIComponent(next)}` : path;
+  }
+
   function destinationUrls() {
-    const params = new URLSearchParams(location.search);
-    const next = params.get("next");
-    const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : null;
+    const safeNext = returnPath();
     const origin = (caps && caps.webOrigin) || location.origin;
     return {
       callbackURL: `${origin}${safeNext || "/app"}`,
-      newUserCallbackURL: `${origin}/onboarding`,
-      errorCallbackURL: `${origin}/sign-in`,
+      newUserCallbackURL: `${origin}${safeNext?.startsWith("/invite/") ? safeNext : "/onboarding"}`,
+      errorCallbackURL: `${origin}${authPath("/sign-in")}`,
     };
   }
 
@@ -262,24 +313,48 @@
   }
 
   async function showSentState(form, email) {
-    const stayOn = (caps && caps.webOrigin) || location.origin;
+    writeSentState(email);
+    form.dataset.rkShowingSent = "1";
+    form.dataset.rkMagicBound = "1";
+    form.classList.remove("rk-sending");
+    const stayOn = location.origin;
     form.innerHTML = `
       <div id="${BANNER_ID}" style="text-align:center">
         <strong>Check your email</strong>
-        <p style="margin:.5rem 0 0">If delivery succeeded, you’ll get a magic link at <strong>${escapeHtml(email)}</strong> within a minute. Open it on this same device/browser.</p>
+        <p style="margin:.5rem 0 0">We sent a magic link to <strong>${escapeHtml(email)}</strong>. Open it on this same device/browser.</p>
         <p style="margin:.55rem 0 0;font-size:12.5px;opacity:.8">Stay on <strong>${escapeHtml(stayOn)}</strong> after clicking. Check spam too.</p>
         <p style="margin:.55rem 0 0;font-size:12.5px;opacity:.75">Temporary/disposable addresses are often blocked by the mail provider.</p>
         <p data-rk="emu" style="margin:.75rem 0 0;font-size:13px;opacity:.85"></p>
-        <p style="margin:1rem 0 0"><a href="/sign-in">Back to sign in</a></p>
+        <p style="margin:1rem 0 0"><a href="${isSignUp() ? "/sign-up" : "/sign-in"}" data-rk="try-again">Try again</a> · <a href="/sign-in">Back to sign in</a></p>
       </div>`;
     lastSignature = "sent:" + email;
     formBound = false;
+    form.querySelector("[data-rk=try-again]")?.addEventListener("click", (e) => {
+      e.preventDefault();
+      clearSentState();
+      location.assign(isSignUp() ? "/sign-up" : "/sign-in");
+    });
     const emu = form.querySelector("[data-rk=emu]");
     if (!caps?.emailEmulator || !emu) return;
     emu.textContent = "Loading local sign-in link…";
     const link = await latestEmulatorLink(email);
     if (link) emu.innerHTML = `Local mail: <a href="${escapeHtml(link)}">Open magic link</a>`;
     else emu.innerHTML = `Open <a href="/api/dev/emails" target="_blank" rel="noreferrer">/api/dev/emails</a>.`;
+  }
+
+  function setSendingState(form, on) {
+    const btn = form.querySelector('button[type="submit"]');
+    form.classList.toggle("rk-sending", on);
+    if (btn) {
+      btn.disabled = on;
+      if (on) {
+        btn.dataset.rkPrevLabel = btn.textContent || "";
+        btn.textContent = "Sending magic link…";
+      } else if (btn.dataset.rkPrevLabel) {
+        btn.textContent = btn.dataset.rkPrevLabel;
+        delete btn.dataset.rkPrevLabel;
+      }
+    }
   }
 
   function showAlert(form, message) {
@@ -326,11 +401,11 @@
           showAlert(form, "Pick an @human name (at least 2 characters).");
           return;
         }
-        const btn = form.querySelector('button[type="submit"]');
-        if (btn) btn.disabled = true;
+        setSendingState(form, true);
         try {
           if (isSignUp() && (await checkEmailExists(email))) {
-            location.assign(`/sign-in?existing=1&email=${encodeURIComponent(email)}`);
+            clearSentState();
+            location.assign(authPath(`/sign-in?existing=1&email=${encodeURIComponent(email)}`));
             return;
           }
           await sendMagicLink(email, handle || undefined);
@@ -343,8 +418,8 @@
           } else if (/disposable|temporary|not available/i.test(raw)) {
             msg = "That email address can’t be used. Try a normal inbox (Gmail, etc.).";
           }
+          setSendingState(form, false);
           showAlert(form, msg);
-          if (btn) btn.disabled = false;
         }
       },
       true,
@@ -365,11 +440,30 @@
 
       // Forgot-password → bounce to magic sign-in
       if (location.pathname === "/forgot-password") {
-        location.replace("/sign-in");
+        location.replace(authPath("/sign-in"));
         return;
       }
 
       ensureStyles();
+      for (const link of document.querySelectorAll('a[href^="/sign-in"], a[href^="/sign-up"]')) {
+        const href = new URL(link.href, location.origin);
+        if (!["/sign-in", "/sign-up"].includes(href.pathname)) continue;
+        const next = returnPath();
+        if (next) href.searchParams.set("next", next);
+        else href.searchParams.delete("next");
+        const target = href.pathname + href.search;
+        if (link.getAttribute("href") !== target) link.setAttribute("href", target);
+        if (!link.dataset.rkReturnBound) {
+          link.dataset.rkReturnBound = "1";
+          link.addEventListener("click", (event) => {
+            if (!returnPath()) return;
+            // React's original Link target would otherwise discard the query.
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            location.assign(link.getAttribute("href"));
+          }, true);
+        }
+      }
       document.body.classList.toggle("rk-auth-signin", isSignIn());
       document.body.classList.toggle("rk-auth-signup", isSignUp());
 
@@ -380,8 +474,23 @@
       }
 
       document.body.classList.add("rk-magic-auth");
+
+      // React remounts wipe the "check email" panel — restore from sessionStorage.
+      const pending = readSentState();
+      if (pending && pending.path === location.pathname) {
+        let form = findAuthForm();
+        if (!form) {
+          form = document.querySelector("form");
+        }
+        if (form && form.dataset.rkShowingSent !== "1") {
+          await showSentState(form, pending.email);
+        }
+        return;
+      }
+
       const form = findAuthForm();
       if (!form) return;
+      if (form.dataset.rkShowingSent === "1") return;
 
       const signature = `${location.pathname}|${location.search}|${form.dataset.rkMagicBound || "0"}`;
       if (signature === lastSignature && form.dataset.rkMagicBound === "1") {
