@@ -149,6 +149,18 @@ Run `node --test tests/auth-invite-navigation.test.mjs` in an environment with `
 under test. The tests mock email requests and send no mail. These web changes were also applied
 to the mounted runtime while retaining its existing magic-link sent-state improvements.
 
+### Magic-link form submission (2026-10-08)
+
+The upstream required password input was hidden by the magic-link overlay but still participated
+in native browser validation. This prevented the submit event and no email request reached the
+API. The overlay now disables that unused input and removes its required flag. The change is
+applied to the tracked overlay and the local mounted runtime.
+
+The three auth DOM tests now use a required password fixture, assert native form validity and
+submit with `requestSubmit()` instead of bypassing browser validation. All passed. The running
+browser also confirmed the password is disabled and optional. SMTP and sender are configured;
+actual inbox delivery still requires a user retry after refreshing the page.
+
 ## Safety
 
 Do not commit real `.env` values, SMTP keys, or auth secrets. Keep LAN/tunnel origins in local env only.

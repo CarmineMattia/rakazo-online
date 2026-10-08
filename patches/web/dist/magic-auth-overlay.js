@@ -82,6 +82,9 @@
       'input#current-password, input#new-password, input[name="password"], input[type="password"]',
     );
     if (!password) return;
+    // Hidden upstream password controls must not block native form validation.
+    if (password.required) password.required = false;
+    if (!password.disabled) password.disabled = true;
     let wrap = password.closest("[data-rk-password-wrap]");
     if (wrap) return;
     wrap = password.parentElement;

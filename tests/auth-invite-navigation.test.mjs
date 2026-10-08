@@ -7,7 +7,7 @@ const { JSDOM } = require(process.env.RAKAZO_JSDOM_PATH || 'jsdom');
 const script = readFileSync(process.env.RAKAZO_AUTH_OVERLAY || new URL('../patches/web/dist/magic-auth-overlay.js', import.meta.url), 'utf8');
 
 async function run(path, next) {
-  const dom = new JSDOM('<div id="root"><form><input id="name" value="@testhuman"><input id="email" value="test@example.invalid"><input name="password" type="password"><button type="submit">Submit</button></form><a href="/sign-up">Sign up</a><a href="/sign-in">Sign in</a></div>', {
+  const dom = new JSDOM('<div id="root"><form><input id="name" value="@testhuman"><input id="email" value="test@example.invalid"><input name="password" type="password" required><button type="submit">Submit</button></form><a href="/sign-up">Sign up</a><a href="/sign-in">Sign in</a></div>', {
     url: `http://localhost:5173${path}?next=${encodeURIComponent(next)}`, runScripts: 'outside-only',
   });
   const calls = [];
@@ -26,8 +26,12 @@ async function run(path, next) {
   try {
     for (let i = 0; i < 100 && !dom.window.document.querySelector('form').dataset.rkMagicBound; i++) await new Promise(r => setTimeout(r, 10));
     assert.equal(dom.window.document.querySelector('form').dataset.rkMagicBound, '1');
+    const password = dom.window.document.querySelector('input[name="password"]');
+    assert.equal(password.required, false);
+    assert.equal(password.disabled, true);
+    assert.equal(dom.window.document.querySelector('form').checkValidity(), true);
     const links = [...dom.window.document.querySelectorAll('a')].map(a => a.getAttribute('href'));
-    dom.window.document.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+    dom.window.document.querySelector('form').requestSubmit();
     for (let i = 0; i < 100 && !calls.length; i++) await new Promise(r => setTimeout(r, 10));
     assert.equal(calls.length, 1);
     return { links, body: calls[0] };
