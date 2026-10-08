@@ -348,3 +348,22 @@ Items below are **planned, not done**.
       bots, so groups can mix humans and bots running on different hardware. Phones are mainly chat
       clients and light nodes while in the foreground. Vision:
       [`docs/share-local-ai.md` §13](docs/share-local-ai.md#13-vision-rakijazios-app-as-a-device-node-m5).
+
+### Device control mode (long-term, after M5)
+
+- [ ] **Opt-in help on your own computer.** Today a bot can't open a terminal or touch files on the
+      owner's desktop: bots only have their sandbox shell, and the runner only shares inference.
+      Later, a bot could help fix problems on the owner's computer **through the runner**, but only
+      when the owner opts in, and only safely:
+  - **Off by default**, enabled per device.
+  - The owner chooses which bots and groups may use it. Shared-group members never get it by default.
+  - **Every** command or file action needs explicit approval from the owner, **on that device**.
+    An allowlist or a read-only mode are options.
+  - A full audit log, an instant kill switch and revocation. No silent background execution.
+  - A clear UI that says "this bot can act on {owner}'s computer".
+  - A threat model covering prompt injection from group messages, exfiltration, privilege
+    escalation, approval fatigue and a compromised server pushing commands. Inference stays
+    separate from control.
+
+  Design notes and open questions:
+  [`docs/share-local-ai.md` §14](docs/share-local-ai.md#14-long-term-device-control-mode).
