@@ -31,9 +31,11 @@ Web UI typically on `:5173`, API on `:3100`.
 
 ## Social
 
-The Host-002 overlay now provides a working first social slice:
+The current UI uses **Share → People & invites** to invite people by link and list space members.
+Username search and profile-image editing are implemented but intentionally hidden by the social
+overlay styles. The available backend features are:
 
-1. **Find registered humans** by `@username` or email from **Share → People & invites**.
+1. **Find registered humans** by `@username` or exact email through the authenticated API.
 2. **Profile images** from an `http(s)` URL or a local image. Browser uploads are cropped to
    256×256 WebP and stored in Better Auth's existing nullable `user.image` field (256 KB maximum).
    Images appear in the sidebar profile control, search results, and space member list.
@@ -85,18 +87,19 @@ mount; its `index.html` loads the auth, invite, and social overlays.
 index with idempotent DDL on first invite/search use. `patches/api/space-invites.sql` contains the
 same SQL for operators who prefer to apply it explicitly before restarting.
 
-### Manual social test
+### Manual browser test
 
-1. Start the normal image stack with both Compose files and create two accounts with distinct
-   `@human` names.
-2. As account A, open **Share**, type account B's `@username`, invite it, and verify a repeated
-   search says **Invited** rather than creating a duplicate.
-3. As account B, open **Share**, accept **Invitations for you**, and verify the active space switches
-   to A's space and both humans appear under **In this space**.
-4. From either account, choose a local PNG/JPEG/WebP/GIF (or save an `http(s)` avatar URL), reload,
-   and verify the image remains in the sidebar and people list. Remove it and verify initials return.
-5. Create a normal link invite and confirm preview/redeem still works. Try its targeted token while
-   signed in as a third account and verify the API returns `403`.
+1. Start the normal image stack with both Compose files and sign in as account A.
+2. Open **Share → People & invites**, create an invitation and copy its link.
+3. Open that link as account B. If signed out, choose **Sign in**; switching to **Sign up** and back
+   must retain the invitation in the `next` query. Complete the emailed magic-link login.
+4. Accept the invitation and verify both people appear under **In this space**. Existing chats and
+   bots remain private to their owners; joining a space does not grant access to them.
+5. Repeat acceptance and verify it does not create a second membership.
+
+Targeted invitations and username search are covered by the two-account API check below; their
+creation controls are not visible in the current UI. Magic-link delivery and signed-in browser
+acceptance still require a separate manual check.
 
 Pure validation/search helper coverage is in `patches/api/social.test.ts`; it is intended to be
 copied beside `social.ts` when validating the overlay against the matching upstream source tree.
@@ -128,6 +131,23 @@ repository is `rakazo-online`. The two corrected API modules were copied to the 
 and the API restarted for verification. Other deployment differences (including Rakijazio branding)
 were retained. Check mounts before applying future changes; editing this checkout alone does not
 update that running stack.
+
+### Invite login navigation (2026-10-08)
+
+The invite page now links directly to `/sign-in?next=/invite/…`. Auth links preserve that return
+path across sign-in/sign-up, existing-account redirects and login errors. New accounts arriving
+from an invite return to it after email verification. Callback paths must resolve to the same
+origin, including protection against protocol-relative and backslash host changes.
+
+Three DOM tests passed for login destinations, registration destinations and unsafe redirects.
+In the running browser, switching from sign-in to sign-up and back preserved the invitation.
+The Share panel text now states the actual ownership behavior instead of promising shared bots.
+Full email delivery and signed-in invitation acceptance have not yet been verified in the browser.
+
+Run `node --test tests/auth-invite-navigation.test.mjs` in an environment with `jsdom` installed.
+`RAKAZO_JSDOM_PATH` can point to an existing jsdom package and `RAKAZO_AUTH_OVERLAY` to the overlay
+under test. The tests mock email requests and send no mail. These web changes were also applied
+to the mounted runtime while retaining its existing magic-link sent-state improvements.
 
 ## Safety
 

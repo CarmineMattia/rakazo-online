@@ -184,15 +184,27 @@
     setSubmitLabel(form, "Send magic link");
   }
 
+  function returnPath() {
+    const next = new URLSearchParams(location.search).get("next");
+    if (!next || !next.startsWith("/")) return null;
+    try {
+      const url = new URL(next, location.origin);
+      return url.origin === location.origin ? `${url.pathname}${url.search}${url.hash}` : null;
+    } catch (_) { return null; }
+  }
+
+  function authPath(path) {
+    const next = returnPath();
+    return next ? `${path}${path.includes("?") ? "&" : "?"}next=${encodeURIComponent(next)}` : path;
+  }
+
   function destinationUrls() {
-    const params = new URLSearchParams(location.search);
-    const next = params.get("next");
-    const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : null;
+    const safeNext = returnPath();
     const origin = (caps && caps.webOrigin) || location.origin;
     return {
       callbackURL: `${origin}${safeNext || "/app"}`,
-      newUserCallbackURL: `${origin}/onboarding`,
-      errorCallbackURL: `${origin}/sign-in`,
+      newUserCallbackURL: `${origin}${safeNext?.startsWith("/invite/") ? safeNext : "/onboarding"}`,
+      errorCallbackURL: `${origin}${authPath("/sign-in")}`,
     };
   }
 
@@ -330,7 +342,7 @@
         if (btn) btn.disabled = true;
         try {
           if (isSignUp() && (await checkEmailExists(email))) {
-            location.assign(`/sign-in?existing=1&email=${encodeURIComponent(email)}`);
+            location.assign(authPath(`/sign-in?existing=1&email=${encodeURIComponent(email)}`));
             return;
           }
           await sendMagicLink(email, handle || undefined);
@@ -365,11 +377,30 @@
 
       // Forgot-password → bounce to magic sign-in
       if (location.pathname === "/forgot-password") {
-        location.replace("/sign-in");
+        location.replace(authPath("/sign-in"));
         return;
       }
 
       ensureStyles();
+      for (const link of document.querySelectorAll('a[href^="/sign-in"], a[href^="/sign-up"]')) {
+        const href = new URL(link.href, location.origin);
+        if (!["/sign-in", "/sign-up"].includes(href.pathname)) continue;
+        const next = returnPath();
+        if (next) href.searchParams.set("next", next);
+        else href.searchParams.delete("next");
+        const target = href.pathname + href.search;
+        if (link.getAttribute("href") !== target) link.setAttribute("href", target);
+        if (!link.dataset.rkReturnBound) {
+          link.dataset.rkReturnBound = "1";
+          link.addEventListener("click", (event) => {
+            if (!returnPath()) return;
+            // React's original Link target would otherwise discard the query.
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            location.assign(link.getAttribute("href"));
+          }, true);
+        }
+      }
       document.body.classList.toggle("rk-auth-signin", isSignIn());
       document.body.classList.toggle("rk-auth-signup", isSignUp());
 
