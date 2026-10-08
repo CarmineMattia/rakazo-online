@@ -34,6 +34,11 @@ async function run(path, next) {
     dom.window.document.querySelector('form').requestSubmit();
     for (let i = 0; i < 100 && !calls.length; i++) await new Promise(r => setTimeout(r, 10));
     assert.equal(calls.length, 1);
+    const form = dom.window.document.querySelector('form');
+    for (let i = 0; i < 100 && form.dataset.rkShowingSent !== '1'; i++) await new Promise(r => setTimeout(r, 10));
+    assert.equal(form.dataset.rkShowingSent, '1');
+    assert.ok(dom.window.document.getElementById('rk-magic-auth-banner'));
+    assert.equal(JSON.parse(dom.window.sessionStorage.getItem('rk.magicLinkSent')).email, 'test@example.invalid');
     return { links, body: calls[0] };
   } finally { observers.forEach(observer => observer.disconnect()); await Promise.resolve(); dom.window.close(); }
 }
