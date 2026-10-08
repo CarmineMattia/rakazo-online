@@ -295,6 +295,13 @@ Items below are **planned, not done**.
 - [ ] The owner can **publish** a bot (and unpublish it). Published bots appear in search for
       everyone.
 
+### Share your local AI
+
+- [ ] Let any user offer models that run on **their own computer** (Ollama / llama.cpp /
+      OpenAI-compatible on localhost) as the backend for their bots, including in shared
+      groups — without opening inbound ports. A small outbound runner pairs with a code;
+      Rakazo only sends inference requests. Design: [`docs/share-local-ai.md`](docs/share-local-ai.md).
+
 ### Bot marketplace
 
 - [ ] A **marketplace of published bots**, with everything that follows:
