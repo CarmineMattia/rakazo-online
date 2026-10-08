@@ -51,12 +51,17 @@ strings, auth email subjects/bodies and the email sender name.
 - **Targeted human invites** into the active space are supported by the API: the recipient sees the
   pending invitation in their own People panel and can join or decline. `redeem` accepts both link
   and targeted invites and stops a different account from redeeming a targeted one.
-- Invites **survive magic-link login**: the invite page links to `/sign-in?next=/invite/…`; the
-  return path is kept across sign-in/sign-up switches, existing-account redirects, login errors
+- Invite links use the public web origin (`WEB_ORIGIN`, the same origin magic links use). They
+  no longer use the internal proxy host (`api:5173`) that the API sees.
+- Invites **survive magic-link login**: a signed-out visitor who presses **Join space** gets a
+  **Sign in** link to `/sign-in?next=/invite/…`; the return path is kept across sign-in/sign-up switches, existing-account redirects, login errors
   and email verification. Callback paths must resolve to the same origin (protocol-relative and
   backslash host tricks are rejected).
 - The in-UI username search, targeted-invite controls ("Invite registered human") and profile
   editing in the People modal are **intentionally hidden**; the share link covers inviting.
+- Spaces you joined but don't own are labelled with their owner's name in the sidebar
+  (e.g. "Personal · crime"), so they aren't confused with your own "Personal". This is a
+  display-only label from the API's space navigation; no data is renamed.
 - **Create new Space** is hidden in the `+` menu (only Create new Group remains), and the chat
   header's name / last-access stack is tightened.
 
@@ -235,17 +240,20 @@ RAKAZO_TEST_URL=http://127.0.0.1:5173 node tests/social-smoke.mjs
   dialog cleared and disabled itself, and history, sends and group listing were refused (404 /
   empty). This run found and fixed two display bugs: native owner messages were labelled
   "Member", and shared messages repeated the stored `@Name: ` prompt prefix.
+- **Invite page, live end to end:** a fresh account (`rakazo.test3@example.com` / "Test Three")
+  opened the owner's invite link signed out and saw the preview ("crime invited you to
+  “Personal”"). **Join space** asked it to sign in, and it switched to sign-up with `next` kept.
+  The real form sent the magic-link request with the invite as `callbackURL` and
+  `newUserCallbackURL`. The link (token taken from the database, because Resend test mode cannot
+  deliver to that address) landed back on the invite, and **Join space** added the member and
+  opened `/app` in that space. Re-opening the used link showed "Invite already used". An existing
+  member (Test Two) opening a fresh invite did not get a duplicate membership.
 
 ## Known limitations
 
 - **Email sender / domain.** Resend has no verified domain yet. With the test sender
   (`onboarding@resend.dev`), magic links are only delivered to the Resend account owner's address;
   other recipients are rejected. Real multi-user sign-up needs a verified domain and `EMAIL_FROM`.
-- Link-invite acceptance through the `/invite/…` **page** by a second browser account is still
-  unverified; the live end-to-end run redeemed the invite through the same API the page uses.
-- **Group sharing is on `main`.** A follow-up branch may land display fixes found by the live
-  end-to-end run (author labels for the owner's native messages, and stripping the stored
-  `@Name: ` prefix in the shared view).
 - **No password flow for magic-only users** yet (planned in Settings).
 
 ## Safety
@@ -267,7 +275,8 @@ Items below are **planned, not done**.
       (merge still pending).
 - [x] Test group sharing for real: a second user in a real browser, talking to a real bot with a
       real model reply.
-- [ ] Verify link-invite acceptance through the `/invite/…` page by a second browser account.
+- [x] Verify link-invite acceptance through the `/invite/…` page by a second browser account
+      (signed-out → magic link → back on the invite → joined).
 - [ ] **Set password** flow in Settings for magic-only users (login and sign-up stay magic-link only).
 - [ ] Verified email domain for Resend and a matching `EMAIL_FROM`, so magic links reach every user.
 

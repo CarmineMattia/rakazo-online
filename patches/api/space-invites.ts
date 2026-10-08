@@ -17,7 +17,33 @@ export type SpaceInviteMountDeps = {
   prisma: PrismaClient;
   auth: SpaceInviteAuth;
   sessionHeaders: (request: Request) => Headers;
+  /** Public web origin (WEB_ORIGIN). Magic links use the same origin. */
+  webOrigin?: string;
 };
+
+/**
+ * Origin for shareable invite links. Prefer the configured public web origin
+ * (the one magic links are aligned to); behind the web proxy the API sees an
+ * internal host such as `api:5173`, which is useless to the recipient.
+ */
+export function inviteLinkOrigin(
+  webOrigin: string | undefined,
+  request: { url: string; header: (name: string) => string | undefined },
+): string {
+  if (webOrigin) {
+    try {
+      const parsed = new URL(webOrigin);
+      if (parsed.protocol === "http:" || parsed.protocol === "https:") return parsed.origin;
+    } catch {
+      // Fall through to the request-derived origin.
+    }
+  }
+  const forwardedHost = request.header("x-forwarded-host");
+  const forwardedProto = request.header("x-forwarded-proto") || "http";
+  return forwardedHost
+    ? `${forwardedProto}://${forwardedHost}`
+    : new URL(request.url).origin.replace(/:3100$/, ":5173");
+}
 
 type ActorLike = { userId: string; spaceId: string };
 
@@ -569,11 +595,10 @@ export function mountSpaceInvites(app: Hono, deps: SpaceInviteMountDeps): void {
     if (!actor) return c.json({ error: "Unauthorized" }, 401);
     try {
       const invite = await createSpaceInvite(deps.prisma, actor);
-      const forwardedHost = c.req.header("x-forwarded-host");
-      const forwardedProto = c.req.header("x-forwarded-proto") || "http";
-      const origin = forwardedHost
-        ? `${forwardedProto}://${forwardedHost}`
-        : new URL(c.req.url).origin.replace(/:3100$/, ":5173");
+      const origin = inviteLinkOrigin(deps.webOrigin, {
+        url: c.req.url,
+        header: (name) => c.req.header(name),
+      });
       return c.json({
         ...invite,
         url: `${origin}/invite/${invite.token}`,
