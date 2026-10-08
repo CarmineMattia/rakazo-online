@@ -101,6 +101,34 @@ same SQL for operators who prefer to apply it explicitly before restarting.
 Pure validation/search helper coverage is in `patches/api/social.test.ts`; it is intended to be
 copied beside `social.ts` when validating the overlay against the matching upstream source tree.
 
+### Verified social flow (2026-10-08)
+
+Fixed two failures reproduced against the running image stack: the nested Prisma email filter
+rejected `mode`, and deserializing the advisory lock's PostgreSQL `void` result prevented direct
+invites. Search now applies case-insensitive mode at the outer email filter; invite creation
+executes the lock without deserializing its result.
+
+Four helper tests and a live two-account API check passed: signup, password sign-in, username
+search without exposing email, targeted invite, duplicate invite protection, acceptance,
+shared-space membership and repeated acceptance. The API check removes the accounts it creates.
+
+With a local stack running and registrations open, reproduce it with:
+
+```bash
+node tests/social-smoke.mjs
+# Optional local port override:
+RAKAZO_TEST_URL=http://127.0.0.1:5173 node tests/social-smoke.mjs
+```
+
+This check creates disposable accounts with `example.invalid` addresses. Use a local test stack
+with email delivery disabled; it does not test magic-link delivery or browser interaction.
+
+The current local containers bind-mount `/home/cr1m3/projects/rakazo/patches`, while this tracked
+repository is `rakazo-online`. The two corrected API modules were copied to the mounted directory
+and the API restarted for verification. Other deployment differences (including Rakijazio branding)
+were retained. Check mounts before applying future changes; editing this checkout alone does not
+update that running stack.
+
 ## Safety
 
 Do not commit real `.env` values, SMTP keys, or auth secrets. Keep LAN/tunnel origins in local env only.

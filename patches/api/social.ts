@@ -97,7 +97,7 @@ export async function searchUsers(prisma: PrismaClient, actor: ActorLike, value:
   const users = await prisma.user.findMany({
     where: {
       id: { not: actor.userId },
-      email: { not: { endsWith: "@messaging.invalid", mode: "insensitive" } },
+      email: { not: { endsWith: "@messaging.invalid" }, mode: "insensitive" },
       OR: [
         ...(query.handle
           ? [

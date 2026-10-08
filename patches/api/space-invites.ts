@@ -227,7 +227,8 @@ export async function createDirectSpaceInvite(prisma: PrismaClient, actor: Actor
   return prisma.$transaction(async (tx) => {
     // Serialize duplicate invite attempts without requiring a generated Prisma
     // model or a non-expiring partial unique index in the upstream image.
-    await tx.$queryRawUnsafe(
+    // The PostgreSQL lock returns void; execute it without deserializing a row.
+    await tx.$executeRawUnsafe(
       `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`,
       `space-invite:${actor.spaceId}:${target.id}`,
     );
