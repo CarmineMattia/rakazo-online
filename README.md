@@ -99,6 +99,9 @@ access to that group's conversation (`group-sharing-overlay.js`):
 - `docker-compose.images.yml` / `docker-compose.override.yml` — image-based run + bind-mounted patches
 - `patches/api/` — API modules (`social.ts`, `space-invites.ts` + `.sql`, `group-sharing.ts`,
   `group-access.ts`, `thread-target.ts`, `app.ts`, `router.ts`, computer/sandbox adapters) and tests
+- `patches/api/local-runners.ts`, `local-runner-seed.ts`, `shared-local-token.ts`, `index.ts`,
+  `pi-local-provider.ts`, `pi-models.ts` — the share-local-AI M1 gateway and `shared-local` provider
+- `runner/` — the outbound local runner (Node 22, no dependencies); see [`runner/README.md`](runner/README.md)
 - `patches/auth/index.ts` — Better Auth config (magic link, single-origin callbacks)
 - `patches/contracts/` — typed RPC/domain contracts
 - `patches/supervisor/` — sandbox supervisor
@@ -131,12 +134,27 @@ Web UI on `:5173`, API on `:3100`. Services: web, api, worker, supervisor, postg
 - **Database changes are additive and idempotent.** `space-invites.ts` adds `target_user_id`,
   `declined_at` and an index on first invite/search use (`space-invites.sql` has the same SQL for
   operators who prefer to apply it up front). `group-access.ts` creates `group_shares` and
-  `group_message_authors` on demand.
+  `group_message_authors` on demand. `local-runners.ts` creates `local_runner_devices` at api start.
 - **This checkout is not the running stack.** The live containers on Host-002 bind-mount
   `/home/cr1m3/projects/rakazo/patches`. Changes are copied there and the affected service is
   restarted. Check the mounts before applying changes; editing this repo alone does not update the
   running stack. As of 2026-10-08 the runtime patch files tracked here match the live stack
   (the live tree also keeps local-only `dist.broken/` and `stock-dist/` copies, not tracked).
+
+## Share your local AI — running M1
+
+Owner-only, same-host prototype: one bot answers via a model on the owner's machine, through an
+outbound runner (no inbound port). Details: [`docs/share-local-ai.md` → M1 as built](docs/share-local-ai.md#m1-as-built-2026-10-08).
+
+1. Compose already sets `RAKAZO_SHARED_LOCAL_GATEWAY_URL` / `RAKAZO_SHARED_LOCAL_MODELS` and mounts
+   the gateway/provider patches for `api` and `worker`.
+2. Seed a device token into a `0600` file (never printed) — see [`runner/README.md`](runner/README.md#1-seed-a-device-token-operator-once).
+3. `runner/scripts/start.sh` (stop: `runner/scripts/stop.sh`; log: `~/.config/rakazo-runner/runner.log`).
+4. Point one bot at it (operator SQL; no UI in M1):
+   `UPDATE bots SET "modelProvider"='shared-local', "modelId"='gemma4:26b-a4b-it-q4_K_M' WHERE id='<bot>';`
+
+If the runner is offline the bot's reply fails with *"{Bot} runs on {owner}'s computer, which is
+offline right now. Try again later."* — no fallback model (decision D1).
 
 ## API surface
 
@@ -301,6 +319,11 @@ Items below are **planned, not done**.
       OpenAI-compatible on localhost) as the backend for their bots, including in shared
       groups — without opening inbound ports. A small outbound runner pairs with a code;
       Rakazo only sends inference requests. Design: [`docs/share-local-ai.md`](docs/share-local-ai.md).
+  - [x] **M1 — same-host prototype (owner only):** outbound runner ([`runner/`](runner/README.md)),
+        api gateway, and a `shared-local` provider for one operator test bot. No pairing UI yet.
+        See [`docs/share-local-ai.md` → M1 as built](docs/share-local-ai.md#m1-as-built-2026-10-08).
+  - [ ] **M2 —** pairing UI, revoke/rotate, grants for shared groups.
+  - [ ] **M3 —** limits and usage.
 
 ### Bot marketplace
 

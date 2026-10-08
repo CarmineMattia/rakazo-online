@@ -6,6 +6,7 @@ import {
   type PrismaClient,
 } from "@rakazo/db";
 import { LOCAL_PROVIDER_ID } from "./pi-local-provider.js";
+import { SHARED_LOCAL_PROVIDER_ID } from "./shared-local-token.js";
 import { listPiCatalog, scriptedCatalogEntry } from "./pi-models.js";
 import { OPENAI_COMPATIBLE_PROVIDER_ID } from "./pi-openai-compatible-provider.js";
 
@@ -66,8 +67,13 @@ export function selectConfiguredModel(input: {
     hasOverride &&
     bot!.modelProvider === LOCAL_PROVIDER_ID &&
     isCatalogModelChoice(bot!.modelProvider!, bot!.modelId!);
+  // Rakijazios M1: a shared-local bot always keeps its override. Falling back
+  // to the space default would silently switch to another model/provider (D1).
+  const sharedLocalOverride = hasOverride && bot!.modelProvider === SHARED_LOCAL_PROVIDER_ID;
   // Override wins with a matching credential, or for keyless local catalog models.
-  const useOverride = Boolean(hasOverride && (overrideCredential || localOverride));
+  const useOverride = Boolean(
+    hasOverride && (overrideCredential || localOverride || sharedLocalOverride),
+  );
   const credential = useOverride ? overrideCredential : defaultCredential;
   return {
     provider:

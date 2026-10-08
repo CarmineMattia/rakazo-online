@@ -4,6 +4,7 @@ import type { JobPublisher } from '@rakazo/adapter-kit';
 import type { SocialMountDeps } from './social.js';
 import { ensureGroupSharing, requireGroupAccess } from './group-access.js';
 import { resolveThreadTarget, sendThreadMessage } from './thread-target.js';
+import { summarizeSharedBlocks } from './group-message-summary.js';
 
 export function mountGroupSharing(app: Hono, deps: SocialMountDeps & { events: ThreadEvents; jobs: JobPublisher }) {
   app.use('/api/group-sharing/*', async (c, next) => {
@@ -92,7 +93,8 @@ export function mountGroupSharing(app: Hono, deps: SocialMountDeps & { events: T
       const authors = await tx.$queryRawUnsafe<Array<{ message_id: string; name: string }>>(
         'SELECT message_id, name FROM group_message_authors WHERE message_id = ANY($1::text[])', rows.map(r => r.id),
       );
-      const botNames = await tx.bot.findMany({ where: { id: { in: rows.flatMap(r => r.botId ? [r.botId] : []) }, spaceId: actor.spaceId }, select: { id: true, name: true } });
+      const handoffTargets = rows.flatMap(r => (Array.isArray(r.blocks) ? r.blocks : []).flatMap((b: any) => b?.kind === 'handoff' && typeof b.toBotId === 'string' ? [b.toBotId] : []));
+      const botNames = await tx.bot.findMany({ where: { id: { in: [...rows.flatMap(r => r.botId ? [r.botId] : []), ...handoffTargets] }, spaceId: actor.spaceId }, select: { id: true, name: true } });
       // Native group sends come only from the owner; shared sends carry an author row.
       const owner = await tx.user.findUnique({ where: { id: group.userId }, select: { name: true } });
       const ownerName = owner?.name?.trim() || 'Owner';
@@ -100,13 +102,16 @@ export function mountGroupSharing(app: Hono, deps: SocialMountDeps & { events: T
       const active = await tx.run.findMany({ where: { threadId: group.thread!.id, status: { in: ['queued','leased','running','waiting_input','waiting_takeover'] } }, select: { status: true } });
       return c.json({ name: group.name, messages: rows.reverse().map(row => {
         const sharedName = authors.find(a => a.message_id === row.id)?.name;
-        let text = (Array.isArray(row.blocks) ? row.blocks : []).filter((b: any) => b?.kind === 'text').map((b: any) => b.text).join('\n');
+        // Non-text turns (tools, handoffs, owner prompts) become short status lines;
+        // owner-only details (prompts, answers, files) are never copied out.
+        const summary = summarizeSharedBlocks(row.blocks, id => botNames.find(b => b.id === id)?.name);
+        let text = summary.text;
         // The stored prompt keeps "@Name: " for the bots and the owner's native view;
         // the shared view already shows the author label, so drop the duplicate prefix.
         if (sharedName && text.startsWith(`@${sharedName}: `)) text = text.slice(sharedName.length + 3);
         return { id: row.id, seq: row.seq, role: row.role,
           author: sharedName || botNames.find(b => b.id === row.botId)?.name || (row.role === 'user' ? ownerName : 'Bot'),
-          text };
+          text, activity: summary.activity };
       }), active: active.map(r => r.status), failed: latestRun?.status === 'failed' });
     });
   }));

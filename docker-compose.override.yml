@@ -15,6 +15,9 @@ services:
       - "host.docker.internal:host-gateway"
     environment:
       RAKAZO_HOST_HOME: ${HOME}/rakazo-local
+      # Rakijazios M1 shared-local: worker -> api gateway -> owner runner.
+      RAKAZO_SHARED_LOCAL_GATEWAY_URL: http://api:3100/api/local-runners/v1
+      RAKAZO_SHARED_LOCAL_MODELS: gemma4:26b-a4b-it-q4_K_M
     volumes:
       - ./patches/api/model-selection.ts:/app/packages/adapters/src/model-selection.ts:ro,z
       - ./patches/api/executor.ts:/app/packages/adapters/src/executor.ts:ro,z
@@ -32,17 +35,32 @@ services:
       - ./patches/contracts/rpc.ts:/app/packages/contracts/src/rpc.ts:ro,z
       - ./patches/contracts/domain.ts:/app/packages/contracts/src/domain.ts:ro,z
       - ./patches/auth/index.ts:/app/packages/auth/src/index.ts:ro,z
+      - ./patches/api/index.ts:/app/apps/api/src/index.ts:ro,z
+      - ./patches/api/local-runners.ts:/app/apps/api/src/local-runners.ts:ro,z
+      - ./patches/api/rpc-errors.ts:/app/apps/api/src/rpc-errors.ts:ro,z
+      - ./patches/api/group-message-summary.ts:/app/apps/api/src/group-message-summary.ts:ro,z
+      - ./patches/api/local-runner-seed.ts:/app/apps/api/src/local-runner-seed.ts:ro,z
+      - ./patches/api/shared-local-token.ts:/app/apps/api/src/shared-local-token.ts:ro,z
+      - ./patches/api/shared-local-token.ts:/app/packages/adapters/src/shared-local-token.ts:ro,z
+      - ./patches/api/pi-local-provider.ts:/app/packages/adapters/src/pi-local-provider.ts:ro,z
+      - ./patches/api/pi-models.ts:/app/packages/adapters/src/pi-models.ts:ro,z
   worker:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
       RAKAZO_HOST_HOME: ${HOME}/rakazo-local
+      # Rakijazios M1 shared-local: worker -> api gateway -> owner runner.
+      RAKAZO_SHARED_LOCAL_GATEWAY_URL: http://api:3100/api/local-runners/v1
+      RAKAZO_SHARED_LOCAL_MODELS: gemma4:26b-a4b-it-q4_K_M
     volumes:
       - ./patches/api/model-selection.ts:/app/packages/adapters/src/model-selection.ts:ro,z
       - ./patches/api/executor.ts:/app/packages/adapters/src/executor.ts:ro,z
       - ./patches/api/docker-sandbox.ts:/app/packages/adapters/src/docker-sandbox.ts:ro,z
       - ./patches/api/host-aware-sandbox.ts:/app/packages/adapters/src/host-aware-sandbox.ts:ro,z
       - ./patches/auth/index.ts:/app/packages/auth/src/index.ts:ro,z
+      - ./patches/api/shared-local-token.ts:/app/packages/adapters/src/shared-local-token.ts:ro,z
+      - ./patches/api/pi-local-provider.ts:/app/packages/adapters/src/pi-local-provider.ts:ro,z
+      - ./patches/api/pi-models.ts:/app/packages/adapters/src/pi-models.ts:ro,z
   web:
     volumes:
       - ./patches/web/dist:/app/apps/web/dist:ro,z

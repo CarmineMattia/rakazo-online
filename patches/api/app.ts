@@ -88,6 +88,8 @@ import { mountComputerSettings } from "./computer-settings.js";
 import { mountSocialRoutes } from "./social.js";
 import { mountGroupSharing } from "./group-sharing.js";
 import { mountSpaceInvites } from "./space-invites.js";
+import { createLocalRunnerGateway, ensureLocalRunnerTables } from "./local-runners.js";
+import { mapDomainRpcErrors } from "./rpc-errors.js";
 import {
   createMessagingInboundHandler,
   teamChatSenderCanWakeMessageRoutines,
@@ -120,6 +122,8 @@ export interface AppHandles {
   email?: TransactionalEmailProvider;
   executor: ReturnType<typeof createRunExecutor>;
   runtime: AgentRuntime;
+  /** Rakijazios M1: attach the local-runner WebSocket upgrade handler to the HTTP server. */
+  attachLocalRunnerUpgrade?: (server: import("node:http").Server) => void;
   stop: () => Promise<void>;
 }
 
@@ -459,7 +463,11 @@ export async function createApp(
     },
   });
   const rpc = new RPCHandler(router, {
-    clientInterceptors: [onError((error, { path }) => logUnexpectedRpcError(error, path))],
+    clientInterceptors: [
+      onError((error, { path }) => logUnexpectedRpcError(error, path)),
+      // Rakijazios: IsolationError → 404 instead of a 500 (see rpc-errors.ts).
+      mapDomainRpcErrors,
+    ],
   });
   const app = new Hono();
   app.use("*", requestLogging(logger));
@@ -537,6 +545,9 @@ export async function createApp(
   mountSocialRoutes(app, { prisma, auth, sessionHeaders });
   mountSpaceInvites(app, { prisma, auth, sessionHeaders, webOrigin: env.webOrigin });
   mountGroupSharing(app, { prisma, auth, sessionHeaders, events, jobs });
+  await ensureLocalRunnerTables(prisma);
+  const localRunnerGateway = createLocalRunnerGateway({ prisma });
+  localRunnerGateway.mountHttp(app);
   mountComputerSettings(app, {
     prisma,
     auth,
@@ -858,6 +869,7 @@ export async function createApp(
     app,
     prisma,
     jobs,
+    attachLocalRunnerUpgrade: localRunnerGateway.attachUpgrade,
     sandbox,
     connector,
     composio: stack.composio,

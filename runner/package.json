@@ -1,0 +1,17 @@
+{
+  "name": "@rakazo/local-runner",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "bin": {
+    "rakazo-runner": "./src/index.ts"
+  },
+  "scripts": {
+    "start": "node --experimental-strip-types src/index.ts",
+    "test": "node --experimental-strip-types --test src/*.test.ts"
+  },
+  "engines": {
+    "node": ">=22.18"
+  }
+}
