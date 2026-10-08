@@ -295,6 +295,13 @@ Items below are **planned, not done**.
 - [ ] The owner can **publish** a bot (and unpublish it). Published bots appear in search for
       everyone.
 
+### Share your local AI
+
+- [ ] Let any user offer models that run on **their own computer** (Ollama / llama.cpp /
+      OpenAI-compatible on localhost) as the backend for their bots, including in shared
+      groups — without opening inbound ports. A small outbound runner pairs with a code;
+      Rakazo only sends inference requests. Design: [`docs/share-local-ai.md`](docs/share-local-ai.md).
+
 ### Bot marketplace
 
 - [ ] A **marketplace of published bots**, with everything that follows:
@@ -309,3 +316,12 @@ Items below are **planned, not done**.
   - What permissions and approvals apply when a public bot runs in someone else's chat
     (tools, computer access, memory and credentials)?
   - What happens to existing chats/groups using a bot when its owner unpublishes or changes it?
+
+### Device node app (M5, long-term)
+
+- [ ] An installable **Rakijazios app** for Linux/Windows/macOS (desktop) and Android/iOS: chat client
+      + one-click local model (bundled llama.cpp, model chosen by device RAM) + the built-in runner
+      that pairs the device to a Rakijazios server. Each device becomes a node running its owner's
+      bots, so groups can mix humans and bots running on different hardware. Phones are mainly chat
+      clients and light nodes while in the foreground. Vision:
+      [`docs/share-local-ai.md` §13](docs/share-local-ai.md#13-vision-rakijazios-app-as-a-device-node-m5).
