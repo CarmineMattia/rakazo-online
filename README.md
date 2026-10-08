@@ -8,7 +8,7 @@ Upstream app images still come from the published Rakazo stack. This repository 
 patches and overlays** (API, auth, contracts, supervisor, web `dist` UI, computer image) plus the
 Compose helpers, so we can evolve the social features without waiting on upstream.
 
-The deployment is branded **Rakijazio's**: page title, PWA manifest, Welcome screen, translated UI
+The deployment is branded **Rakijazios**: page title, PWA manifest, Welcome screen, translated UI
 strings, auth email subjects/bodies and the email sender name.
 
 **Contents**
@@ -252,7 +252,7 @@ Items below are **planned, not done**.
 
 ### Next steps
 
-- [x] Bring the live runtime back in sync: move the **Rakijazio's** rebrand and the newer magic-auth
+- [x] Bring the live runtime back in sync: move the **Rakijazios** rebrand and the newer magic-auth
       overlay (`?v=sentfix1`) from `~/projects/rakazo` into this repo.
 - [x] Commit the group sharing work and open a PR from `codex/fix-social-invites` to `main`
       (merge still pending).

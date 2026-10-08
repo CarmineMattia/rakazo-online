@@ -37,7 +37,7 @@ export async function resolveSignupPolicy(
 
 export function createAuth(prisma: PrismaClient, env: AuthEnv) {
   return betterAuth({
-    appName: "Rakijazio's",
+    appName: "Rakijazios",
     secret: env.secret,
     baseURL: env.baseURL,
     trustedOrigins: buildTrustedOrigins(env),
@@ -270,24 +270,24 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
 export function verificationEmail(email: string, url: string): TransactionalEmail {
   return {
     to: email,
-    subject: "Verify your Rakijazio's email",
-    text: `Verify your email, then return to Rakijazio's to sign in:\n\n${url}\n\nThis link expires in one hour. If you did not register, ignore this email.`,
-    html: `<p><a href="${escapeHtml(url)}">Verify email</a>, then return to Rakijazio's to sign in.</p><p>This link expires in one hour. If you did not register, ignore this email.</p>`,
+    subject: "Verify your Rakijazios email",
+    text: `Verify your email, then return to Rakijazios to sign in:\n\n${url}\n\nThis link expires in one hour. If you did not register, ignore this email.`,
+    html: `<p><a href="${escapeHtml(url)}">Verify email</a>, then return to Rakijazios to sign in.</p><p>This link expires in one hour. If you did not register, ignore this email.</p>`,
   };
 }
 
 export function magicLinkEmail(email: string, url: string): TransactionalEmail {
   return {
     to: email,
-    subject: "Sign in to Rakijazio's",
+    subject: "Sign in to Rakijazios",
     text: [
-      "Sign in to Rakijazio's using this link:",
+      "Sign in to Rakijazios using this link:",
       "",
       url,
       "",
       "This link expires in 15 minutes. If you did not request this, ignore this email.",
     ].join("\n"),
-    html: `<p><a href="${escapeHtml(url)}">Sign in to Rakijazio's</a></p><p>This link expires in 15 minutes. If you did not request this, ignore this email.</p>`,
+    html: `<p><a href="${escapeHtml(url)}">Sign in to Rakijazios</a></p><p>This link expires in 15 minutes. If you did not request this, ignore this email.</p>`,
   };
 }
 
@@ -300,16 +300,16 @@ export function passwordResetEmail(
   const safeUrl = escapeHtml(resetUrl);
   return {
     to: user.email,
-    subject: "Reset your Rakijazio's password",
+    subject: "Reset your Rakijazios password",
     text: [
       `Hi ${name},`,
       "",
-      "Reset your Rakijazio's password using this link:",
+      "Reset your Rakijazios password using this link:",
       resetUrl,
       "",
       "This link expires in one hour. If you did not request this, you can ignore this email.",
     ].join("\n"),
-    html: `<p>Hi ${safeName},</p><p>Reset your Rakijazio's password:</p><p><a href="${safeUrl}">Reset password</a></p><p>This link expires in one hour. If you did not request this, you can ignore this email.</p>`,
+    html: `<p>Hi ${safeName},</p><p>Reset your Rakijazios password:</p><p><a href="${safeUrl}">Reset password</a></p><p>This link expires in one hour. If you did not request this, you can ignore this email.</p>`,
   };
 }
 
