@@ -1,4 +1,4 @@
-# Rakijazios local runner (0.2.0-m2a)
+# Rakijazios local runner (0.2.1-m2a)
 
 A small Node 22 program that lets your bots use a model running on **your own computer**.
 It opens an **outbound** WebSocket to Rakijazios, signs in with a device key, and forwards
@@ -36,23 +36,63 @@ written only to `~/.config/rakazo-runner/credentials.json` (`0600`). It is never
 
 Running the command again on the same computer, or using **New key**, keeps the same entry in
 My hardware (models and switches are kept). The dialog switches to **connected** on its own.
+If the computer already runs a runner (an earlier M2a install or the M1 `start.sh` runner), the
+installer keeps its connection and only updates the runner files; see
+[Existing installs](#existing-installs-upgrade-replace-one-runner-per-folder).
 
 ## 2. Commands
 
 ```bash
-rakazo-runner pair --server https://<your-rakijazios> --code K7QF-3MZD [--name "My PC"]
+rakazo-runner pair --server https://<your-rakijazios> --code K7QF-3MZD [--name "My PC"] [--replace]
 rakazo-runner start      # background (or the systemd/launchd service if installed)
-rakazo-runner stop
+rakazo-runner stop       # the service AND any runner from the pid file (e.g. M1 start.sh)
 rakazo-runner status     # connection, model server, models; never shows the key
+rakazo-runner inspect    # what is installed in this config dir (no secrets); exit 1 = nothing
 rakazo-runner run        # foreground; also the default with no command (as in M1)
 rakazo-runner version
 ```
+
+Exit codes: `0` ok, `1` error, `3` refused because of an existing install (nothing changed).
 
 From a checkout: `node runner/src/index.ts <command>`. The M1 scripts still work:
 `runner/scripts/start.sh` / `stop.sh` (= `run` in the background; pid and log in the config dir).
 
 When the owner clicks **Remove** or **New key** in My hardware, the runner gets `bye` and exits
 with code 0, so services don't restart it. After 3 rejected keys in a row it exits too.
+
+## Existing installs (upgrade, replace, one runner per folder)
+
+The config dir (`~/.config/rakazo-runner` by default) is shared by the M1 runner and M2a.
+Running the installer (or `rakazo-runner pair`) where credentials already exist is safe:
+
+| Found in the config dir | What happens |
+|---|---|
+| A key for **this server and this account** that still works (M2a, or M1/seeded credentials whose gateway is the same host) | **Kept.** No new key is created and `credentials.json` is not touched. The one-time code is used up, the dialog shows **connected** with the existing computer, its models and switches stay. The runner files are upgraded and the runner restarted. Output: `This computer is already connected as "<name>". Kept its key and settings` |
+| A key for **another server**, **another account**, a key the server does not know, or a **New key** code meant for a different computer | **Refused**, exit code `3`. Nothing is stopped, written or uploaded, and the code stays unused. The message explains the two ways out below |
+| A key that **no longer works** (computer removed, or re-keyed elsewhere) | Paired again normally; the old file is kept as `credentials.previous-<time>.json` |
+| An unreadable `credentials.json` | Paired normally; the old file is kept as `credentials.unreadable-<time>.json` |
+| A login service (systemd unit / launchd agent / Startup entry) that belongs to **another install** | **Refused**, exit code `3`, before anything is paired |
+
+Ways out of a refusal:
+
+- **`--replace`** (`curl … | sh -s -- --code XXXX-XXXX --replace`; Windows: set
+  `RAKAZO_REPLACE=1`): connects this computer as a **new** computer. The old credentials are kept
+  as `credentials.replaced-<time>.json` (`0600`) and are never sent to the new server. Nothing is
+  removed on any server: remove the old computer in My hardware if you no longer need it.
+- **A second, separate runner:** set both `RAKAZO_RUNNER_CONFIG_DIR` and `RAKAZO_RUNNER_SERVICE`
+  (and `RAKAZO_RUNNER_HOME`) to other values.
+
+The existing key is only offered back to the server that issued it: same origin for M2a
+credentials. M1 credentials only store the gateway URL, so there the host name must match
+(`localhost`, `127.0.0.1` and `::1` count as one host). The server checks the device, the account
+and the key before keeping it, and answers `409` without using the code otherwise.
+
+**One runner per config dir.** Every runner writes `runner.pid` there (the M1 `scripts/start.sh`
+does too). `run` and `start` refuse to start while another runner holds the folder. The installer
+stops the old runner before switching: `stop` stops the systemd/launchd service and then any
+runner named in the pid file (for example an M1 `start.sh` runner), and fails if it does not exit.
+Only then are the new files put in place and the service started. On Windows the pid file is
+refreshed every 30 s and counts as stale after 2 minutes.
 
 ## 3. Environment overrides
 
@@ -64,6 +104,7 @@ with code 0, so services don't restart it. After 3 rejected keys in a row it exi
 | `RAKAZO_RUNNER_CREDENTIALS` | `<config dir>/credentials.json` |
 | `RAKAZO_RUNNER_SERVICE` | `rakijazios-runner` / `com.rakijazios.runner` (service name used by `start`/`stop`) |
 | `RAKAZO_RUNNER_HOME`, `RAKAZO_RUNNER_BIN_DIR` | installer only: install dir and shim dir |
+| `RAKAZO_REPLACE=1` | Windows installer only: same as `--replace` |
 
 `wss://` / `https://` are required unless the server is on loopback.
 `RAKAZO_RUNNER_ALLOW_INSECURE=1` is for tests only.
@@ -86,7 +127,7 @@ automatically. Computers paired from the web start with every model **off**.
 ## 5. Tests
 
 ```bash
-cd runner && node --test src/*.test.ts   # protocol, loopback rule, discovery, pairing helpers
+cd runner && node --test src/*.test.ts   # protocol, loopback rule, discovery, pairing, existing installs, CLI
 ```
 
 ## Behaviour

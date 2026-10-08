@@ -154,7 +154,7 @@ returns **404** (as with the B1 fix), never 403.
 | `POST /api/local-runners/pairings` `{os?}` | owner | New code → `{pairingId, code, expiresAt, commands{unix, powershell, windowsCmd, …}}`. A new code cancels the previous unused one; max 10 devices |
 | `GET  /api/local-runners/pairings/:id` | owner | `pending / connected / expired` (dialog polling) |
 | `POST /api/local-runners/pairings/:id/cancel` | owner | Invalidate a code |
-| `POST /api/local-runners/pair` `{code, name, platform, runnerVersion, existing?}` | **runner, no cookie** | Redeem code → `{deviceId, token, gatewayWsUrl, reused}`. Failed attempts limited per client and globally |
+| `POST /api/local-runners/pair` `{code, name, platform, runnerVersion, existing?, adopt?}` | **runner, no cookie** | Redeem code → `{deviceId, token, gatewayWsUrl, reused}`; with `adopt` and a valid key → `{deviceId, name, adopted: true}` (no new key) or `409 {reason}` (code not used). Failed attempts limited per client and globally |
 | `GET /api/local-runners/install.sh`, `install.ps1`, `runner/manifest.json`, `runner/files/:name` | public (flagged) | Installers and pinned runner files; no secrets |
 | `GET /api/local-runners/config` | anyone | `{enabled, maxDevices}`, so the overlay stays hidden when the flag is off |
 | `POST /api/local-runners/devices/:id` `{name?, enabled?}` | owner | Rename / pause / resume |
@@ -419,13 +419,28 @@ Plus: pairing is OS-aware and automatic (§1.1); one-click native install stays 
 | Pairing-code HMAC | `patches/api/shared-local-token.ts` (`hashPairingCode`) |
 | WS through the web origin (`ws: true` entry for `/api/local-runners/ws`) | `patches/web/vite.config.ts` |
 | Settings → My hardware overlay | `patches/web/dist/local-hardware-overlay.js` |
-| Runner 0.2.0-m2a: `pair/start/stop/status/run`, model discovery, policy enforcement, `bye` handling, secure-transport rule | `runner/src/*` |
+| Runner 0.2.1-m2a: `pair/start/stop/status/inspect/run`, model discovery, policy enforcement, `bye` handling, secure-transport rule | `runner/src/*` |
+| Existing installs: keep a working key, refuse ambiguous cases (exit 3), `--replace`, one runner per config dir | `runner/src/existing.ts`, `pair.ts`, `index.ts`; `adopt` in `local-runner-control.ts` |
 
 **M1 compatibility.** Devices seeded by the M1 CLI (`paired_via` NULL/`seed`) get the operator's
 `RAKAZO_SHARED_LOCAL_MODELS` switched on automatically, so Chief Local keeps answering. The M1
 runner and its `ws://127.0.0.1:3100` credentials keep working unchanged. Until M2b binds bots to a
 computer, a `shared-local` run goes to the least busy online computer of the owner that offers the
 model and has it switched on. The worker is unchanged in M2a.
+
+**Existing installs (after QA of PR #7).** M1 and M2a share `~/.config/rakazo-runner`. The
+installer now runs `inspect → pair → stop → swap files → start`:
+- `pair` sends the stored key as `adopt: {deviceId, token}` (only to the server that issued it).
+  The api keeps the device if it is active, owned by the code's account and the key matches. It
+  then uses up the code (the dialog flips to connected) without issuing a new key. Another account,
+  an unknown device, or a "New key" code for another device → `409 {reason}`. The code stays unused
+  and no failure is counted. A dead key re-pairs normally (backup kept).
+- Every ambiguous case is refused with exit 3 before anything is stopped or written. `--replace`
+  (`RAKAZO_REPLACE=1` on Windows) pairs as a new device, keeps a backup and revokes nothing.
+- One runner per config dir: `run`/`start` refuse while `runner.pid` names a live runner. `stop`
+  stops the service and then the pid-file runner (M1 `start.sh`), so the installer never leaves
+  two runners on one dir.
+Details: [`runner/README.md`](../runner/README.md#existing-installs-upgrade-replace-one-runner-per-folder).
 
 **Feature flag.** `RAKAZO_LOCAL_RUNNERS_UI=1` on the api. When it is off, the overlay stays hidden
 and the control/installer routes answer 404. The gateway (`/ws`, `/v1/*`) is unaffected.

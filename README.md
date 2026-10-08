@@ -164,7 +164,11 @@ compose override):
    - Windows: a downloadable `.cmd` with the code inside.
    The installer gets Node.js if needed (portable, checksum-verified), installs the pinned runner,
    pairs, starts it, and sets up autostart (systemd --user / launchd / Startup folder). The
-   dialog flips to **connected** by itself.
+   dialog flips to **connected** by itself. On a computer that already runs a runner (M1
+   `start.sh` or an earlier install) it keeps the existing connection and only upgrades and
+   restarts the runner. Anything ambiguous (another server or account) is refused without changes;
+   `--replace` connects it as a new computer. Only one runner ever uses a config folder (see
+   [`runner/README.md`](runner/README.md#existing-installs-upgrade-replace-one-runner-per-folder)).
 2. Switch on the models to offer (all start off). Per computer you can **Rename**,
    **Pause sharing**, use **New key** (rotate) and **Remove** (revoke). Up to 10 computers per
    account.

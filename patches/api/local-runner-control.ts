@@ -19,7 +19,7 @@
  *
  * Everything except the gateway (/ws, /v1/*) is behind RAKAZO_LOCAL_RUNNERS_UI=1.
  */
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import type { PrismaClient } from "@rakazo/db";
 import type { Context, Hono } from "hono";
 import type { LocalRunnerGateway } from "./local-runners.js";
@@ -94,6 +94,8 @@ class HttpError extends Error {
   constructor(
     readonly status: 400 | 401 | 404 | 409 | 413 | 415 | 429,
     message: string,
+    /** Machine-readable reason for the runner (e.g. why an existing install can't be kept). */
+    readonly reason?: string,
   ) {
     super(message);
   }
@@ -148,7 +150,9 @@ export function mountLocalRunnerControl(app: Hono, deps: LocalRunnerControlDeps)
         await ensureLocalRunnerTables(prisma);
         return await handler(c);
       } catch (error) {
-        if (error instanceof HttpError) return c.json({ error: error.message }, error.status);
+        if (error instanceof HttpError) {
+          return c.json(error.reason ? { error: error.message, reason: error.reason } : { error: error.message }, error.status);
+        }
         throw error;
       }
     };
@@ -476,6 +480,14 @@ export function mountLocalRunnerControl(app: Hono, deps: LocalRunnerControlDeps)
     }),
   );
 
+  function parseDeviceCredentials(raw: unknown): { deviceId: string; token: string } | null {
+    if (!raw || typeof raw !== "object") return null;
+    const r = raw as { deviceId?: unknown; token?: unknown };
+    if (typeof r.deviceId !== "string" || typeof r.token !== "string") return null;
+    if (!r.deviceId || r.deviceId.length > 64 || !r.token || r.token.length > 256) return null;
+    return { deviceId: r.deviceId, token: r.token };
+  }
+
   // ---- runner: redeem a one-time code ----
   app.post(
     "/api/local-runners/pair",
@@ -493,6 +505,63 @@ export function mountLocalRunnerControl(app: Hono, deps: LocalRunnerControlDeps)
       const body = await readBody(c);
       const code = normalizePairingCode(body.code);
       if (!code) fail();
+
+      // Keep an existing install ("adopt"): the runner on this computer already holds a
+      // valid key for one of this user's computers. The code is consumed (so the dialog
+      // shows "connected") but no new key is issued and nothing is overwritten. Every
+      // refusal leaves the code unused so the user can re-run with --replace.
+      const adopt = parseDeviceCredentials(body.adopt);
+      if (adopt) {
+        const open = await prisma.$queryRawUnsafe<PairingRow[]>(
+          `SELECT id, user_id, device_id, result_device_id, os, expires_at, used_at, cancelled_at
+             FROM local_runner_pairings
+            WHERE code_hash = $1 AND used_at IS NULL AND cancelled_at IS NULL AND expires_at > NOW()`,
+          hashPairingCode(code!),
+        );
+        const pending = open[0];
+        if (!pending) return fail();
+        const rows = await prisma.$queryRawUnsafe<Array<{ id: string; user_id: string; name: string; status: string; token_hash: string }>>(
+          `SELECT id, user_id, name, status, token_hash FROM local_runner_devices WHERE id = $1`,
+          adopt.deviceId,
+        );
+        const dev = rows[0];
+        if (!dev) {
+          throw new HttpError(409, "The key stored on this computer is not known to this server.", "unknown");
+        }
+        if (dev.user_id !== pending.user_id) {
+          throw new HttpError(409, "This computer is connected to a different Rakijazios account.", "other_account");
+        }
+        if (pending.device_id && pending.device_id !== dev.id) {
+          throw new HttpError(409, "This code is for a different computer than the one this runner is connected as.", "other_device");
+        }
+        const presented = Buffer.from(hashDeviceToken(adopt.token));
+        const stored = Buffer.from(dev.token_hash);
+        const keyOk = dev.status === "active" && presented.length === stored.length && timingSafeEqual(presented, stored);
+        if (keyOk) {
+          const taken = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+            `UPDATE local_runner_pairings SET used_at = NOW(), result_device_id = $2
+              WHERE id = $1 AND used_at IS NULL AND cancelled_at IS NULL AND expires_at > NOW()
+              RETURNING id`,
+            pending.id,
+            dev.id,
+          );
+          if (!taken.length) return fail();
+          await prisma.$executeRawUnsafe(
+            `UPDATE local_runner_devices SET platform = COALESCE($2, platform),
+               runner_version = COALESCE($3, runner_version), updated_at = NOW() WHERE id = $1`,
+            dev.id,
+            sanitizeShort(body.platform, 40),
+            sanitizeShort(body.runnerVersion),
+          );
+          return c.json({ deviceId: dev.id, name: dev.name, adopted: true });
+        }
+        // Dead key (removed, or given a new key). With a plain "Add" code the runner pairs
+        // again as a new computer; a "New key" code for this very computer re-keys it below.
+        if (!pending.device_id) {
+          throw new HttpError(409, "The key stored on this computer no longer works.", "inactive");
+        }
+      }
+
       // Single use, atomically: only one request can claim a code.
       const claimed = await prisma.$queryRawUnsafe<PairingRow[]>(
         `UPDATE local_runner_pairings SET used_at = NOW()

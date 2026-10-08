@@ -478,6 +478,13 @@
           { className: "rk-hw-hint" },
         ),
       );
+      p.append(
+        el(
+          "p",
+          "Already connected that computer before (also with the older runner)? Running this again keeps its connection and settings and only updates the runner. It never replaces another connection unless you add --replace.",
+          { className: "rk-hw-hint", data: { rk: "hw-existing-hint" } },
+        ),
+      );
     }
 
     const status = el("div", "", { className: "rk-hw-status", attrs: { role: "status" }, data: { rk: "hw-status" } });

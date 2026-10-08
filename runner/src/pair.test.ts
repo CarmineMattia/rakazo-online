@@ -1,10 +1,11 @@
-import { describe, it, before, after } from "node:test";
+import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assertSecureTransport, readCredentials, writeCredentials } from "./config.ts";
-import { normalizePairingCode, pairDevice, sameServer } from "./pair.ts";
+import { EXIT_REFUSED } from "./existing.ts";
+import { PairRefused, normalizePairingCode, pairDevice, sameServer } from "./pair.ts";
 
 describe("pairing helpers", () => {
   it("normalizes codes like the server", () => {
@@ -35,53 +36,153 @@ describe("pairing helpers", () => {
   });
 });
 
+type Seen = Array<Record<string, unknown>>;
+const json = (body: unknown, status = 200) => Response.json(body, { status });
+function fakeServer(seen: Seen, answer: (body: Record<string, unknown>) => Response) {
+  return (async (_url: string, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    seen.push(body);
+    return answer(body);
+  }) as unknown as typeof fetch;
+}
+const S = "http://127.0.0.1:5173";
+const GW = "ws://127.0.0.1:5173/api/local-runners/ws";
+
 describe("pairDevice", () => {
   let dir = "";
-  before(() => {
+  const file = () => join(dir, "credentials.json");
+  const backups = () => readdirSync(dir).filter((f) => f.startsWith("credentials.") && f !== "credentials.json");
+  beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), "rk-runner-test-"));
     process.env.RAKAZO_RUNNER_CONFIG_DIR = dir;
     delete process.env.RAKAZO_RUNNER_CREDENTIALS;
   });
-  after(() => {
+  afterEach(() => {
     rmSync(dir, { recursive: true, force: true });
     delete process.env.RAKAZO_RUNNER_CONFIG_DIR;
   });
 
-  it("stores the key privately, returns no secret, and re-sends an old key only to its server", async () => {
-    const seen: Array<Record<string, unknown>> = [];
-    const fakeFetch = (async (_url: string, init?: RequestInit) => {
-      seen.push(JSON.parse(String(init?.body)));
-      return Response.json({ deviceId: "dev1", token: "SECRET-TOKEN-1", gatewayWsUrl: "ws://127.0.0.1:5173/api/local-runners/ws", name: "box", reused: false });
-    }) as unknown as typeof fetch;
-    const out = await pairDevice({ server: "http://127.0.0.1:5173/", code: "k7qf-3mzd", name: "box", runnerVersion: "t", fetchImpl: fakeFetch });
-    assert.deepEqual(out, { deviceId: "dev1", name: "box", reused: false });
+  it("fresh computer: stores the key privately and returns no secret", async () => {
+    const seen: Seen = [];
+    const out = await pairDevice({
+      server: `${S}/`, code: "k7qf-3mzd", name: "box", runnerVersion: "t",
+      fetchImpl: fakeServer(seen, () => json({ deviceId: "dev1", token: "SECRET-TOKEN-1", gatewayWsUrl: GW, name: "box" })),
+    });
+    assert.deepEqual(out, { outcome: "paired", deviceId: "dev1", name: "box" });
     assert.equal(JSON.stringify(out).includes("SECRET"), false);
     assert.equal(seen[0]!.code, "K7QF3MZD");
-    assert.equal("existing" in seen[0]!, false);
-    const file = join(dir, "credentials.json");
-    assert.equal(statSync(file).mode & 0o777, 0o600);
+    assert.equal("adopt" in seen[0]! || "existing" in seen[0]!, false);
+    assert.equal(statSync(file()).mode & 0o777, 0o600);
     assert.equal(readCredentials()?.token, "SECRET-TOKEN-1");
-    assert.equal(readCredentials()?.server, "http://127.0.0.1:5173");
+    assert.equal(readCredentials()?.server, S);
+  });
 
-    // Same server again: proves the old key so the same computer is re-keyed.
-    await pairDevice({ server: "http://127.0.0.1:5173", code: "K7QF3MZD", runnerVersion: "t", fetchImpl: fakeFetch });
-    assert.deepEqual(seen[1]!.existing, { deviceId: "dev1", token: "SECRET-TOKEN-1" });
+  it("existing install on the same server: keeps the credentials untouched (adopt)", async () => {
+    writeCredentials({ deviceId: "dev1", token: "OLD-KEY", gatewayWsUrl: GW, server: S });
+    const before = readFileSync(file(), "utf8");
+    const seen: Seen = [];
+    const out = await pairDevice({
+      server: S, code: "K7QF3MZD", runnerVersion: "t",
+      fetchImpl: fakeServer(seen, () => json({ deviceId: "dev1", name: "Box", adopted: true })),
+    });
+    assert.deepEqual(out, { outcome: "adopted", deviceId: "dev1", name: "Box" });
+    assert.deepEqual(seen[0]!.adopt, { deviceId: "dev1", token: "OLD-KEY" });
+    assert.equal(readFileSync(file(), "utf8"), before);
+    assert.deepEqual(backups(), []);
+  });
 
-    // A different server never sees the old key.
-    writeCredentials({ deviceId: "dev1", token: "SECRET-TOKEN-1", gatewayWsUrl: "ws://127.0.0.1:5173/api/local-runners/ws", server: "http://127.0.0.1:5173" });
-    await pairDevice({ server: "https://other.example", code: "K7QF3MZD", runnerVersion: "t", fetchImpl: (async (_u: string, init?: RequestInit) => {
-      seen.push(JSON.parse(String(init?.body)));
-      return Response.json({ deviceId: "dev2", token: "T2", gatewayWsUrl: "wss://other.example/api/local-runners/ws" });
-    }) as unknown as typeof fetch });
-    assert.equal("existing" in seen[2]!, false);
-    assert.ok(!readFileSync(file, "utf8").includes("SECRET-TOKEN-1"));
+  it("M1 credentials (no `server`, gateway on the api port of the same host) are adopted too", async () => {
+    writeFileSync(file(), JSON.stringify({ deviceId: "m1dev", token: "M1-KEY", gatewayWsUrl: "ws://127.0.0.1:3100/api/local-runners/ws" }), { mode: 0o600 });
+    const before = readFileSync(file(), "utf8");
+    const seen: Seen = [];
+    const out = await pairDevice({
+      server: S, code: "K7QF3MZD", runnerVersion: "t",
+      fetchImpl: fakeServer(seen, () => json({ deviceId: "m1dev", name: "my-pc", adopted: true })),
+    });
+    assert.equal(out.outcome, "adopted");
+    assert.deepEqual(seen[0]!.adopt, { deviceId: "m1dev", token: "M1-KEY" });
+    assert.equal(readFileSync(file(), "utf8"), before);
+  });
+
+  it("credentials for another server: refuses without sending anything, changes nothing", async () => {
+    writeCredentials({ deviceId: "dev1", token: "OLD-KEY", gatewayWsUrl: "wss://a.example/api/local-runners/ws", server: "https://a.example" });
+    const before = readFileSync(file(), "utf8");
+    const seen: Seen = [];
+    await assert.rejects(
+      () => pairDevice({ server: "https://b.example", code: "K7QF3MZD", runnerVersion: "t", fetchImpl: fakeServer(seen, () => json({})) }),
+      (err: unknown) => err instanceof PairRefused && err.exitCode === EXIT_REFUSED && /a\.example/.test(err.message) && /--replace/.test(err.message),
+    );
+    assert.equal(seen.length, 0); // the old key never leaves for another server
+    assert.equal(readFileSync(file(), "utf8"), before);
+  });
+
+  for (const reason of ["other_account", "other_device", "unknown"] as const) {
+    it(`server says ${reason}: refuses, credentials untouched, no backup`, async () => {
+      writeCredentials({ deviceId: "dev1", token: "OLD-KEY", gatewayWsUrl: GW, server: S });
+      const before = readFileSync(file(), "utf8");
+      const seen: Seen = [];
+      await assert.rejects(
+        () => pairDevice({ server: S, code: "K7QF3MZD", runnerVersion: "t", fetchImpl: fakeServer(seen, () => json({ error: "no", reason }, 409)) }),
+        (err: unknown) => err instanceof PairRefused && /Nothing was changed/.test(err.message),
+      );
+      assert.equal(seen.length, 1);
+      assert.equal(readFileSync(file(), "utf8"), before);
+      assert.deepEqual(backups(), []);
+    });
+  }
+
+  it("dead key (removed / re-keyed): pairs again and keeps a private backup", async () => {
+    writeCredentials({ deviceId: "dev1", token: "DEAD-KEY", gatewayWsUrl: GW, server: S });
+    const seen: Seen = [];
+    const out = await pairDevice({
+      server: S, code: "K7QF3MZD", runnerVersion: "t",
+      fetchImpl: fakeServer(seen, (b) => (b.adopt ? json({ error: "dead", reason: "inactive" }, 409) : json({ deviceId: "dev2", token: "NEW-KEY", gatewayWsUrl: GW, name: "box" }))),
+    });
+    assert.equal(out.outcome, "repaired");
+    assert.equal(seen.length, 2);
+    assert.equal("adopt" in seen[1]!, false);
+    assert.equal(readCredentials()?.token, "NEW-KEY");
+    const [backup] = backups();
+    assert.ok(backup?.startsWith("credentials.previous-"));
+    assert.equal(statSync(join(dir, backup!)).mode & 0o777, 0o600);
+    assert.ok(readFileSync(join(dir, backup!), "utf8").includes("DEAD-KEY"));
+  });
+
+  it("a New key code for this computer: stores the new key for the same device", async () => {
+    writeCredentials({ deviceId: "dev1", token: "ROTATED-OLD", gatewayWsUrl: GW, server: S });
+    const out = await pairDevice({
+      server: S, code: "K7QF3MZD", runnerVersion: "t",
+      fetchImpl: fakeServer([], () => json({ deviceId: "dev1", token: "ROTATED-NEW", gatewayWsUrl: GW, name: "box", reused: true })),
+    });
+    assert.equal(out.outcome, "reconnected");
+    assert.equal(readCredentials()?.token, "ROTATED-NEW");
+  });
+
+  it("--replace: pairs as a new computer, never sends the old key, keeps a backup", async () => {
+    writeCredentials({ deviceId: "dev1", token: "OLD-KEY", gatewayWsUrl: "wss://a.example/api/local-runners/ws", server: "https://a.example" });
+    const seen: Seen = [];
+    const out = await pairDevice({
+      server: S, code: "K7QF3MZD", runnerVersion: "t", replace: true,
+      fetchImpl: fakeServer(seen, () => json({ deviceId: "dev9", token: "NEW-KEY", gatewayWsUrl: GW, name: "box" })),
+    });
+    assert.equal(out.outcome, "replaced");
+    assert.equal(JSON.stringify(seen).includes("OLD-KEY"), false);
+    assert.equal(readCredentials()?.token, "NEW-KEY");
+    assert.ok(backups()[0]?.startsWith("credentials.replaced-"));
+  });
+
+  it("a failed pairing never touches existing credentials", async () => {
+    writeCredentials({ deviceId: "dev1", token: "OLD-KEY", gatewayWsUrl: GW, server: S });
+    const before = readFileSync(file(), "utf8");
+    await assert.rejects(() =>
+      pairDevice({ server: S, code: "K7QF3MZD", runnerVersion: "t", replace: true, fetchImpl: fakeServer([], () => json({ error: "That code is wrong" }, 400)) }),
+    /That code is wrong/);
+    assert.equal(readFileSync(file(), "utf8"), before);
   });
 
   it("refuses a server that answers with an insecure remote gateway", async () => {
-    const fakeFetch = (async () =>
-      Response.json({ deviceId: "d", token: "t", gatewayWsUrl: "ws://evil.example/ws" })) as unknown as typeof fetch;
     await assert.rejects(
-      () => pairDevice({ server: "https://good.example", code: "K7QF3MZD", runnerVersion: "t", fetchImpl: fakeFetch }),
+      () => pairDevice({ server: "https://good.example", code: "K7QF3MZD", runnerVersion: "t", fetchImpl: fakeServer([], () => json({ deviceId: "d", token: "t", gatewayWsUrl: "ws://evil.example/ws" })) }),
       /unencrypted/,
     );
   });
