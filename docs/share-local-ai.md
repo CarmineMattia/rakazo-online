@@ -351,9 +351,11 @@ WHERE id='<bot id>' AND "userId"='<owner id>';
 
 Known M1 limits: the runner dials the api port directly (`ws://127.0.0.1:3100`, because the vite
 preview proxy on :5173 is not configured for WS); there is no pairing, grants or usage accounting yet;
-and the gateway is single-instance (in-memory sessions, **O2**). A shared-local bot added to a shared
-group would use the owner's runner for every member's message. **Don't add shared-local bots to
-shared groups until M2 grants exist.** Runs longer than 1 h would outlive the run token.
+and the gateway is single-instance (in-memory sessions, **O2**). Mid-answer runner/api drops use the
+same friendly offline notice as the preflight case; the web stream-watchdog overlay recovers an open
+chat after an api restart without a reload. A shared-local bot added to a shared group would use the
+owner's runner for every member's message. **Don't add shared-local bots to shared groups until M2
+grants exist.** Runs longer than 1 h would outlive the run token.
 
 ### M2 — Pairing UI + grants
 
