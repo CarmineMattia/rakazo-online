@@ -86,6 +86,7 @@ import { type AppEnv, loadEnv } from "./env.js";
 import { mountLocalSettings } from "./local-settings.js";
 import { mountComputerSettings } from "./computer-settings.js";
 import { mountSocialRoutes } from "./social.js";
+import { mountGroupSharing } from "./group-sharing.js";
 import { mountSpaceInvites } from "./space-invites.js";
 import {
   createMessagingInboundHandler,
@@ -535,6 +536,7 @@ export async function createApp(
   mountLocalSettings(app, { token: env.desktopStackToken, prisma, rpc });
   mountSocialRoutes(app, { prisma, auth, sessionHeaders });
   mountSpaceInvites(app, { prisma, auth, sessionHeaders });
+  mountGroupSharing(app, { prisma, auth, sessionHeaders, events, jobs });
   mountComputerSettings(app, {
     prisma,
     auth,

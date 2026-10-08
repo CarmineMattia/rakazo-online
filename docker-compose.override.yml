@@ -23,6 +23,9 @@ services:
       - ./patches/api/router.ts:/app/apps/api/src/router.ts:ro,z
       - ./patches/api/app.ts:/app/apps/api/src/app.ts:ro,z
       - ./patches/api/social.ts:/app/apps/api/src/social.ts:ro,z
+      - ./patches/api/group-access.ts:/app/apps/api/src/group-access.ts:ro,z
+      - ./patches/api/group-sharing.ts:/app/apps/api/src/group-sharing.ts:ro,z
+      - ./patches/api/thread-target.ts:/app/apps/api/src/thread-target.ts:ro,z
       - ./patches/api/space-invites.ts:/app/apps/api/src/space-invites.ts:ro,z
       - ./patches/api/computer-settings.ts:/app/apps/api/src/computer-settings.ts:ro,z
       - ./patches/api/computer-status.ts:/app/apps/api/src/computer-status.ts:ro,z
