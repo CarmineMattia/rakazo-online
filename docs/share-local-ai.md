@@ -513,10 +513,10 @@ These apply to **both** capabilities in §14.3.
 
 ### 14.3 Two capabilities: Browser and Computer
 
-Device control is **two separate capabilities**. Each has its own toggle and icon, and the owner
-grants each one **per device and per bot**. Granting one never grants the other.
+Device control is **two separate capabilities**. Each has its own toggle and icon (in the chat
+composer next to **+**, §14.4), and the owner grants each one **per device and per bot**. Granting one never grants the other.
 
-| | **Browser** 🌐 (browser icon) | **Computer** 🖥️ (computer/terminal icon) |
+| | **Browser** (globe icon) | **Computer** (monitor/terminal icon) |
 |---|---|---|
 | **What the bot can do** | Drive a browser on that computer: open pages, read them, scroll, click, type, fill in forms and take actions on sites | Use that computer's files and shell: open a terminal session, list, read, write and modify files, run commands |
 | **Included** | A **dedicated browser profile** (§14.5); tabs it opened; page text and screenshots of those tabs, sent back to the bot | Commands and file actions as the **normal user**, inside the working directories the owner chose (§14.6) |
@@ -526,45 +526,208 @@ grants each one **per device and per bot**. Granting one never grants the other.
 
 ### 14.4 UX
 
-**Where.** Two toggles, each with its icon:
-- on the device card in **Settings → My hardware**, showing which bots have which capability;
-- in each bot's settings, under "On {device}": 🌐 Browser, 🖥️ Computer.
+#### 14.4.1 Placement: toggles in the chat composer
 
-The bot-side toggle is a request. The capability only becomes active after the owner confirms
-**on the device** (see Granting).
+- **Primary quick toggle: the composer bar.** Two icon buttons sit in the chat composer, right
+  next to the existing **+** button:
+  - **Browser:** a globe icon (Lucide `globe`);
+  - **Computer:** a monitor/terminal icon (Lucide `monitor` or `square-terminal`).
+- **Same style as the "+".** Same shape, size, spacing and hover/focus treatment. They use the
+  app's own icon set (Lucide, which the web app already ships), not emoji.
+- **Which bot.** The toggle applies to the bot in the current chat. In a group with several of the
+  owner's bots, the toggle applies to the bot selected or @-mentioned in the composer. If no single
+  bot is targeted, the owner first picks a bot from a small menu.
+- **Which device.**
+  - Normally the toggle applies to the bot's **bound device** (M2b binding). The tooltip names it,
+    e.g. "Browser on Host-001".
+  - If the owner has **several devices** and the bot isn't bound to one, the first click opens a
+    **device picker** listing online devices first.
+  - If the owner has **no paired device**, the button links to **Settings → My hardware → Add a
+    computer** (see open question C15).
+- **Owner only.** The composer toggles are shown **only to the bot's owner**, and only in chats
+  where that bot is present.
+- **Other group members** never see a toggle. They see the **badge/indicator** only (below).
+- **Management and overview** stay where they were:
+  - the device card in **Settings → My hardware** lists which bots have which capability, on which
+    device, in which mode, with revoke buttons;
+  - each bot's settings have an "On {device}" section with the same two toggles and the mode
+    (approve each time / allowlist / read-only), scope (folders, sites) and groups.
 
-**States** (per device × bot × capability):
+  The composer is the fast path; these pages are for reviewing and fine-tuning.
 
-| State | Icon look | Meaning |
+#### 14.4.2 States: dimmed when off, lit when on
+
+The rule at a glance: **off = dimmed** (low opacity, outline icon), **on = fully lit** (full
+opacity, bright accent colour, filled background like a pressed button). Every state also has a
+distinct shape cue, a tooltip and an accessible label, so colour or opacity is never the only
+signal.
+
+| State | Look | Tooltip (example) |
 |---|---|---|
-| **Off** | Grey outline | Default. The bot cannot ask for this capability |
-| **Waiting for confirmation** | Grey with a clock | Turned on in the web, not yet confirmed on the device |
-| **On: approve each action** | Coloured | Default "on" mode: every action prompts on the device |
-| **On: allowlist** | Coloured + list mark | Pre-approved commands, paths or sites run after a lighter prompt (or none, for read-only items). Anything else prompts |
-| **On: read-only** | Coloured + eye mark | Look but don't change (§14.2, principle 3) |
-| **Paused** | Coloured, struck through | Kept configured but no actions allowed, for example while the owner is away. One click to resume |
-| **Device offline** | Faded | Configured, but the device is not connected. Requests fail with a clear notice (no fallback, as with **D1**) |
+| **Off** | Dimmed (≈40% opacity), outline only | "Browser: off. Click to let {Bot} use your browser on {device}" |
+| **Waiting for confirmation** | Half-lit, gently pulsing (no pulse with reduced motion), small clock overlay | "Browser: waiting for you to confirm on {device}" |
+| **On: approve each action** | Fully lit | "Browser: on. You approve every action on {device}" |
+| **On: allowlist** | Fully lit + small list badge | "Computer: on (allowlist). Listed commands need a lighter OK; anything else asks" |
+| **On: read-only** | Fully lit + small eye badge | "Computer: on (read-only). {Bot} can look but not change anything" |
+| **Paused** | Lit but desaturated, small pause overlay | "Browser: paused. Click to resume" |
+| **Device offline** | Dimmed, small "offline" dot/slash overlay | "Computer: {device} is offline. Turned on, but nothing can run until it reconnects" |
+| **Running now** | Fully lit + subtle activity ring | "{Bot} is using your browser on {device}. Click to stop" |
+
+**Accessibility.**
+- Each toggle is a real `button` with `aria-pressed="true|false"` for off and on (the pending,
+  paused and offline states use `aria-pressed="mixed"` or a description).
+- An `aria-label` names the capability, the bot and the device, e.g. "Let Fixer use your browser on
+  Host-001".
+- An `aria-describedby` points at the current state text.
+- Keyboard: Tab to focus, Enter/Space to toggle, with a visible focus ring.
+- State changes are announced through a polite live region ("Browser for Fixer is now on").
+- Contrast for both lit and dimmed states meets WCAG AA for the icon against the composer.
+
+**Clicks.**
+- Click on "off": opens the **explanation modal** (14.4.3).
+- Click on "on": opens a small menu with **Pause**, **Change mode/scope**, **Turn off** and
+  **Activity log**.
+- While running: **Stop now** is the first item.
+
+#### 14.4.3 Turning a capability on: the explanation modal
+
+Turning Browser or Computer on **always opens a modal first**, before any grant request is sent.
+There is no way to enable a capability without it: not from the composer, not from bot settings,
+not from My hardware, and not through the API without the confirmation it records.
+
+**What the modal covers**, in plain language:
+- what it is and does;
+- what it unlocks, with concrete examples;
+- the downsides and risks, said honestly;
+- which protections apply;
+- how to turn it off.
+
+**Explicit consent.**
+- A checkbox **"I understand what {Bot} will be able to do"** must be ticked before the confirm
+  button becomes active.
+- The confirm button names the action ("Turn on Browser for {Bot}"). **Cancel** is just as visible
+  and is the default focus.
+- After confirming, the toggle shows **Waiting for confirmation**, and the **device-side
+  confirmation** (14.4.4) still follows. The modal never replaces it.
+
+**When the modal shows again.**
+- The first time a capability is enabled for a given **bot × device**.
+- After **any scope change**:
+  - moving from read-only or allowlist to approve-each-time;
+  - adding folders, sites or groups (especially shared groups);
+  - switching Browser to the main profile;
+  - unblocking payment pages;
+  - binding the bot to another device.
+- After the grant was revoked, or the device was removed or re-keyed.
+- Narrowing the scope (read-only, removing folders) or pausing and resuming doesn't show it again.
+
+**Tone.** Transparent and calm. No fearmongering, no dark patterns, nothing hidden in small print.
+The reader is a person who should understand exactly what they agree to. Short sentences, concrete
+examples, and the risks next to the benefits. The modal links to the activity log and this doc for
+details.
+
+**Localization.** All modal copy, tooltips, labels and badges must be localized with the rest of
+the UI: English, **Italian** and **Turkish** at least. The checkbox and button text must stay just
+as explicit in every language.
+
+Draft copy (English; `{Bot}`, `{device}` and `{owner}` are filled in):
+
+> **Let {Bot} use your browser on {device}?**
+>
+> **What this does.** {Bot} will be able to open web pages in a browser on {device}, read them,
+> scroll, click and type, much like you would.
+>
+> **What you can do with it.** For example: "find the cheapest train to Belgrade and show me the
+> options", "fill in this form with the details I gave you", "check why this page shows an error",
+> "download last month's invoice from this site".
+>
+> **What to keep in mind.**
+> - {Bot} will see the pages it opens, and can act on them. It can make mistakes, like clicking
+>   the wrong button.
+> - Web pages and messages in your groups can contain hidden instructions that try to trick a bot
+>   ("prompt injection"). That's why every action needs your OK.
+> - **Logins:** {Bot} uses a **separate browser profile** on {device}, with **no logins and no
+>   saved passwords**. It isn't signed in anywhere unless you sign in yourself, in that window.
+>   Your usual browser, its sessions and passwords stay out of reach.
+> - Payment, banking and account-security pages are blocked.
+>
+> **How you stay in control.**
+> - Every action (opening a page, clicking, typing) asks you first **on {device}**.
+> - You can limit {Bot} to certain sites.
+> - Everything is recorded in an activity log you can read.
+> - One click stops it instantly.
+>
+> **How to turn it off.** Click the globe icon next to **+** in the chat and choose **Turn off**,
+> or use Settings → My hardware. Turning it off stops anything in progress immediately.
+>
+> ☐ **I understand what {Bot} will be able to do in my browser.**
+>
+> [Cancel] [**Turn on Browser for {Bot}**]
+>
+> *Next: confirm on {device}. Nothing is turned on until you do.*
+
+> **Let {Bot} use files and the terminal on {device}?**
+>
+> **What this does.** {Bot} will be able to work with files and run commands on {device}, in a
+> terminal you can see. It's limited to the folders you choose.
+>
+> **What you can do with it.** For example: "why is my disk full?", "read this log file and tell
+> me what went wrong", "run the tests in my project and fix the failing one", "rename these photos
+> by date".
+>
+> **What to keep in mind.**
+> - {Bot} will see the files it opens in the folders you allow, and can change or delete them if
+>   you approve. Commands can have effects that are hard to undo.
+> - It can make mistakes, and messages in your groups or text inside files and web pages can try
+>   to trick it ("prompt injection"). That's why every command needs your OK.
+> - It never gets administrator rights, and it can't touch your keys, passwords, browser data or
+>   this app's own settings, even inside an allowed folder.
+>
+> **How you stay in control.**
+> - Every command and file change asks you first **on {device}**, showing exactly what will run.
+> - You can choose **read-only** (look, don't change) or a list of allowed commands.
+> - Everything is recorded in an activity log you can read.
+> - One click stops it instantly and kills anything running.
+>
+> **How to turn it off.** Click the computer icon next to **+** in the chat and choose **Turn
+> off**, or use Settings → My hardware. Turning it off stops anything in progress immediately.
+>
+> ☐ **I understand what {Bot} will be able to do on my computer.**
+>
+> [Cancel] [**Turn on Computer for {Bot}**]
+>
+> *Next: confirm on {device}. Nothing is turned on until you do.*
+
+The **main browser profile** (§14.5) gets its own, second modal. That modal names the sessions at
+stake ("email, bank, work tools: anywhere you're signed in") and needs its own checkbox.
+
+#### 14.4.4 Granting and revoking
 
 **Granting.**
 - **Owner only.** Only the device owner can grant, and only for their own bots.
-- **Confirmed on the device.** The web toggle creates a pending grant. The device shows "Allow
-  {Bot} to use your **browser** on this computer?" (or **computer**), with the chosen mode,
-  scope and groups. The grant only becomes active after the owner confirms there. Nothing can be
-  granted from the server side alone.
-- **Groups and chats are opt-in.** The grant lists the groups and chats where the capability may
-  be used. Default: the owner's private chat with that bot only.
+- **Confirmed on the device.** After the modal, the device shows "Allow {Bot} to use your
+  **browser** on this computer?" (or **computer**), with the chosen mode, scope and groups. The
+  grant only becomes active after the owner confirms there. Nothing can be granted from the server
+  side alone.
+- **Groups and chats are opt-in.** By default the grant covers only the chat where the owner
+  turned it on, or the owner's private chat with the bot. Adding shared groups is a scope change
+  (modal again).
 
 **Revoking.**
-- **One click, instant**, from the web toggle, the device (tray or app) or the kill switch
-  ("stop all control on this computer").
+- **One click, instant**, from the composer toggle menu, bot settings, My hardware, the device
+  (tray or app) or the kill switch ("stop all control on this computer"). No modal is needed to
+  turn something off.
 - **Ongoing actions are cancelled.** The running command is killed, the browser automation stops,
   and the dedicated browser profile's automation session is closed. The bot sees "access was
   turned off by {owner}".
 - Removing or re-keying the device, or turning off the bot, revokes everything for it.
 
-**Badges for group members.** Next to the bot's name, in the member list and on its messages:
-- 🌐 "**can use {owner}'s browser**" / 🖥️ "**can use {owner}'s computer**", shown only in
-  groups where that capability is granted;
+#### 14.4.5 What group members see
+
+Other members see **no toggle**, only badges and indicators:
+- next to the bot's name, in the member list and on its messages, they see a globe or monitor
+  badge with "**can use {owner}'s browser**" or "**can use {owner}'s computer**". The badge only
+  appears in groups where that capability is granted;
 - while an action runs: "**{Bot} is using {owner}'s browser…**", so everyone can see the action.
 
 Members can see **that** an action ran, and its summary; how much output they see is open
@@ -659,6 +822,10 @@ question C8.
 | **C12** | **Detecting sensitive pages:** how to reliably recognise payment, banking and account-security pages across sites and languages, and what to do when unsure (default: treat as sensitive). |
 | **C13** | **Computer on Windows:** PowerShell vs `cmd`, and equivalents for the denylist, read-only commands and the no-admin rule. |
 | **C14** | **Grant granularity:** is per device × bot × capability enough, or do some owners need per-group or time-limited grants ("for the next hour")? |
+| **C15** | **Composer toggle without a bound device:** show it dimmed with a "connect a computer" hint, show it only once a device is paired, or hide it until the bot is bound (M2b)? And with several devices, should the picker remember the last choice per bot? |
+| **C16** | **Groups with several of the owner's bots:** is a composer toggle tied to the @-mentioned bot clear enough, or should the toggles live on each bot's chip or avatar instead? |
+| **C17** | **Modal consent records:** what to store (version of the modal text, language, timestamp, bot × device × scope), and whether to show the owner their past consents in the activity log. |
+| **C18** | **Mobile composer:** where the two icons go on narrow screens (next to **+**, or inside the **+** menu), while keeping the off/on look obvious. |
 
 ## 15. References (code touchpoints)
 

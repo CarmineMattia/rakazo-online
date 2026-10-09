@@ -355,8 +355,10 @@ Items below are **planned, not done**.
       owner's desktop: bots only have their sandbox shell, and the runner only shares inference.
       Later, a bot could help fix problems on the owner's computer **through the runner**, but only
       when the owner opts in, and only safely:
-  - **Two separate toggles**, each with its own icon: 🌐 **Browser** (open pages, click, type) and
-    🖥️ **Computer** (files and shell). Both are **off by default** and enabled per device **and** per bot.
+  - **Two separate toggles in the chat composer** (next to **+**, dimmed when off, lit when on):
+    **Browser** (globe: open pages, click, type) and **Computer** (monitor: files and shell). Both
+    are **off by default**, enabled per device **and** per bot, and only after a plain-language
+    explanation modal and confirmation on the device.
   - The owner chooses which bots and groups may use it. Shared-group members never get it by default.
   - **Every** command or file action needs explicit approval from the owner, **on that device**.
     An allowlist or a read-only mode are options.
