@@ -370,3 +370,20 @@ Items below are **planned, not done**.
 
   Design notes and open questions:
   [`docs/share-local-ai.md` §14](docs/share-local-ai.md#14-long-term-device-control-mode).
+
+### Live voice mode (long-term)
+
+- [ ] **Talk to a bot live.** Clicking the bot's icon/avatar next to the composer makes the bot
+      greet you out loud in its own voice (a short "ehi" or a sound). It then opens a live,
+      interactive voice conversation with that bot and its personality, with a clear
+      listening/speaking indicator and the transcript kept in the chat. Separate from Device
+      control mode. Open questions:
+  - STT/TTS engines, local vs cloud, and cost. The local runner could serve STT/TTS (link with
+    Share your local AI).
+  - A voice per bot.
+  - Latency and barge-in (interrupting the bot).
+  - Mic permission and a clear on/off/listening indicator.
+  - How it works in shared groups.
+  - Audio privacy and retention.
+
+  Idea note: [`docs/live-voice-mode.md`](docs/live-voice-mode.md).
