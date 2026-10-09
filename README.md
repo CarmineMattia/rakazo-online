@@ -4,7 +4,7 @@
 
 # Rakijazios
 
-**Rakijazios** is a customized, self-hosted **Rakazo** running on Host-002. The
+**Rakijazios** is a customized, self-hosted **Rakazo** running on Host-001. The
 goal is a more **social** product: people find each other by `@handle` or email, have profile
 pictures, join shared conversations with humans and bots, and invite others with a share link.
 
@@ -283,7 +283,7 @@ RAKAZO_TEST_URL=http://127.0.0.1:5173 node tests/social-smoke.mjs
 
 - Never commit real `.env` values, SMTP keys, auth secrets or API keys. Keep LAN/tunnel origins
   (`WEB_ORIGIN`, `BETTER_AUTH_URL`, `API_URL`, `RAKAZO_HOST`) in the local `.env` only.
-- All Rakazo / Host-002 patches belong in this repository.
+- All Rakazo / Host-001 patches belong in this repository.
 - Test databases get schema only, never private data.
 
 ## Roadmap
