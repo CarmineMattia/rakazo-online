@@ -26,8 +26,8 @@ real secrets in files you commit.
 ## 1. Get the code and create `.env`
 
 ```bash
-git clone https://github.com/CarmineMattia/rakazo-online.git
-cd rakazo-online
+git clone https://github.com/CarmineMattia/rakijazios.git
+cd rakijazios
 bash install-images.sh --local --prepare-only
 ```
 

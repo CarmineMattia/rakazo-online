@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/built%20on-Rakazo-6b2138" alt="Built on Rakazo">
   <a href="#contribute"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen" alt="PRs welcome"></a>
   <a href="AGENTS.md"><img src="https://img.shields.io/badge/AI%20agents-read%20AGENTS.md-8A2BE2" alt="AI agents: read AGENTS.md"></a>
-  <img src="https://img.shields.io/badge/license-to%20be%20chosen-lightgrey" alt="License: to be chosen">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License: Apache-2.0"></a>
 </p>
 
 > [!TIP]
@@ -28,7 +28,7 @@
 - 👥 **Social first:** find people by `@handle` or email, add a profile photo, invite friends with a **link**.
 - 🤖 **Bots live with you:** share a **group** with humans *and* bots, or talk 1:1 with a bot.
 - 🔑 **Bring your own model:** your API key, or a model on **your own hardware** that your bots can use.
-- 📦 This repo (`rakazo-online`) holds **our patches** on top of the upstream Rakazo images.
+- 📦 This repo (`rakijazios`) holds **our patches** on top of the upstream Rakazo images.
 
 <a id="features"></a>
 
@@ -60,7 +60,7 @@
 
 1. 📥 **Get the code and create `.env`** (random secrets are generated for you):
    ```bash
-   git clone https://github.com/CarmineMattia/rakazo-online.git && cd rakazo-online
+   git clone https://github.com/CarmineMattia/rakijazios.git && cd rakijazios
    bash install-images.sh --local --prepare-only
    ```
 2. ✏️ **Edit `.env`**, at least:
@@ -174,7 +174,7 @@ has the project map, exact commands and the **hard rules** (no secrets, backups,
 
 ## 📜 License
 
-> [!NOTE]
-> **TODO: license to be chosen.** There is no `LICENSE` file yet, so default copyright applies
-> until one is added. Upstream [Rakazo](https://github.com/elie222/rakazo) is licensed
-> **Apache-2.0**; the chosen license must be compatible with it.
+- ⚖️ **Apache-2.0**: see [LICENSE](LICENSE) and [NOTICE](NOTICE). © 2026 Carmine Mattia.
+- 🙏 **Thanks to [Rakazo](https://github.com/elie222/rakazo)** and its contributors. Rakijazios is
+  a customized distribution of Rakazo (also Apache-2.0); files under `patches/` are modified
+  Rakazo files and keep their upstream copyright notices.

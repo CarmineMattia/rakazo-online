@@ -19,6 +19,9 @@ For a fresh install see [self-hosting.md](self-hosting.md). Coding agents: also 
   restarted. Check the mounts before applying changes; editing this repo alone does not update the
   running stack. As of 2026-10-08 the runtime patch files tracked here match the live stack
   (the live tree also keeps local-only `dist.broken/` and `stock-dist/` copies, not tracked).
+- **Repo vs folders:** the GitHub repo is **`CarmineMattia/rakijazios`** (renamed from
+  `rakazo-online`; old URLs redirect). On Host-001 the git checkout is still
+  `~/projects/rakazo-online`, which is fine and doesn't need renaming.
 - **Where it runs:** `~/projects/rakazo` on Host-001 (not a git checkout). Containers:
   `rakazo-api-1`, `rakazo-web-1`, `rakazo-worker-1`, `rakazo-postgres-1`,
   `rakazo-supervisor-1`, plus `rakazo-mailpit-1`.

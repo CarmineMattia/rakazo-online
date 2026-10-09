@@ -19,7 +19,7 @@ For **any** coding agent working on this repo: Grok, Claude, Codex, Cursor, and 
 1. 🔐 **Never commit or print secrets**: `.env`, `credentials.json`, API keys, tokens, pairing
    codes, magic-link tokens, SMTP URLs, real passwords. **The repo is public.** Count secrets in
    logs instead of printing them. Keep long-lived tokens out of URLs and shell history.
-2. 📦 **Rakazo patches go only in this repo** (`rakazo-online`). Not in the live folder, not in any
+2. 📦 **Rakazo patches go only in this repo** (`rakijazios`; the local checkout may still be called `rakazo-online`). Not in the live folder, not in any
    other checkout or bot workspace. The live stack gets **copies**.
 3. 🗄️ **Database changes are additive only** (new tables/columns, idempotent `IF NOT EXISTS`). Never
    drop or rewrite existing data.
@@ -36,6 +36,8 @@ For **any** coding agent working on this repo: Grok, Claude, Codex, Cursor, and 
 8. 🔑 **No default shared API key.** Never wire one person's key (e.g. OpenRouter) in as a default
    for others. Each user brings their own key or hardware.
 9. 🍾 **The brand is "Rakijazios"** in all user-facing text ([rules](#brand-and-copy)).
+   ⚖️ **License: Apache-2.0.** Keep upstream copyright notices in files under `patches/`, keep
+   `LICENSE` and `NOTICE`, and mark substantial changes to upstream files.
 10. 🧯 **If something big is blocked, stop and report.** Don't improvise risky workarounds.
 
 Design invariants of *Share your local AI* (don't break them): the runner is **outbound-only**
@@ -50,8 +52,9 @@ when a runner is offline the bot replies with a **friendly notice and no fallbac
 ## 🗂️ Project map
 
 ```text
-rakazo-online/
+rakijazios/                      (local checkout on Host-001: ~/projects/rakazo-online)
 ├── README.md                    front page (short, for humans)
+├── LICENSE / NOTICE             Apache-2.0; NOTICE credits upstream Rakazo (keep both when copying files)
 ├── AGENTS.md / CLAUDE.md        this guide (CLAUDE.md just points here)
 ├── docker-compose.images.yml    upstream image-based stack (web, api, worker, supervisor, postgres, computer)
 ├── docker-compose.override.yml  our layer: bind-mounts patches/*, env, host bits
@@ -248,7 +251,7 @@ Known limits / not covered: <…>
 ## 🏷️ Brand and copy
 
 - ✍️ Product name: **Rakijazios** (capital R, one word). Say **Rakazo** only for the upstream
-  project, and `rakazo-online` for this repo.
+  project, and `rakijazios` for this repo (formerly `rakazo-online`).
 - 🇹🇷 **Turkish suffixes** take an apostrophe, with vowel harmony (as already used in the UI):
   **Rakijazios'a** (to), **Rakijazios'ta** (in/at), **Rakijazios'un** (of).
 - 🌍 UI copy: plain, friendly English first. Italian and Turkish must follow for user-facing
