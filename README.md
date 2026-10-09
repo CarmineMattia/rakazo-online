@@ -1,15 +1,20 @@
-# Rakazo Online
+<!-- Logo placeholder: add the logo at docs/assets/logo.png, then uncomment the block below.
+<p align="center"><img src="docs/assets/logo.png" alt="Rakijazios logo" width="160"></p>
+-->
 
-Rakazo Online is our self-hosted, customized **Rakazo** running on Host-002. The goal is a more
-**social** product: people find each other by `@handle` or email, have profile pictures, join
-shared conversations with humans and bots, and invite others with a share link.
+# Rakijazios
 
-Upstream app images still come from the published Rakazo stack. This repository holds **our
-patches and overlays** (API, auth, contracts, supervisor, web `dist` UI, computer image) plus the
-Compose helpers, so we can evolve the social features without waiting on upstream.
+**Rakijazios** is a customized, self-hosted **Rakazo** running on Host-002. The
+goal is a more **social** product: people find each other by `@handle` or email, have profile
+pictures, join shared conversations with humans and bots, and invite others with a share link.
 
-The deployment is branded **Rakijazios**: page title, PWA manifest, Welcome screen, translated UI
-strings, auth email subjects/bodies and the email sender name.
+Upstream app images still come from the published Rakazo stack. This repository
+(`rakazo-online`) holds **our patches and overlays** (API, auth, contracts, supervisor, web
+`dist` UI, computer image) plus the Compose helpers, so we can evolve Rakijazios without waiting on
+upstream.
+
+The Rakijazios brand is applied across the deployment: page title, PWA manifest, Welcome
+screen, translated UI strings, auth email subjects/bodies and the email sender name.
 
 **Contents**
 
