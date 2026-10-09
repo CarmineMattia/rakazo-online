@@ -39,6 +39,22 @@ How far the current provider API supports streaming is to be checked.
 - **End:** click the avatar again, press end, or after a period of silence. The mic is released
   immediately.
 
+### Live transcript (ideal, feasibility to verify)
+
+During a voice conversation the transcript **scrolls live in the chat**, for both sides:
+
+- **You:** your words appear **while you speak**, from interim (partial) speech-to-text results.
+- **The bot:** its reply appears **as it is spoken**, in sync with the audio, word by word or in
+  short chunks. This uses the word/chunk timing that the text-to-speech engine reports.
+- **Interim vs final:** text still being spoken is shown **visually distinct**, for example
+  lighter or italic with a small "live" marker. When a turn ends it **becomes a normal chat
+  message**, with the same look, history and authorship as typed messages.
+- **Groups:** other members see **at least the finalized messages**. Whether they also see the
+  live interim text is part of V5.
+
+This is the target experience. Whether the engines can deliver it with good timing is still to be
+checked (V9–V13).
+
 ## Open questions
 
 | Id | Question |
@@ -51,3 +67,8 @@ How far the current provider API supports streaming is to be checked.
 | **V6** | **Audio privacy and retention:** is audio stored at all (default: no, only the transcript in the chat), where it is processed (cloud provider vs the owner's runner), and what group members and bot owners can see or hear. |
 | **V7** | **The greeting:** a spoken "ehi" vs a short sound, per-bot customisation, and respecting a muted device or "no sound" setting. |
 | **V8** | **Costs and limits:** per-minute cost of cloud STT/TTS, who pays when someone talks to another owner's bot, and limits to avoid surprise bills. |
+| **V9** | **Engines with timing:** which streaming STT and TTS engines (local and cloud) give interim results and **word-level timestamps** (or chunk timing) that the live transcript needs, and at what cost. |
+| **V10** | **Interim text without jitter:** how to update or replace interim words smoothly as STT revises them, and what gets stored (default: **only final** messages; interim text is never saved). |
+| **V11** | **Latency budget and sync drift:** how much delay is acceptable between speech and on-screen text, and how to keep the bot's text in step with its audio (buffering, clock drift, network jitter). |
+| **V12** | **Barge-in and the transcript:** when the user interrupts, **cut the bot's text** at the last word actually spoken, so the transcript matches what was heard (and decide whether the bot's memory keeps the unspoken rest). |
+| **V13** | **Accessibility:** screen-reader behaviour for live text (polite live region, no flood of updates), captions for deaf or hard-of-hearing users, font size and contrast for interim text, and reduced-motion scrolling. |
