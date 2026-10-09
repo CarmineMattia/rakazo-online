@@ -1,8 +1,6 @@
-<!-- Logo placeholder: add the logo at docs/assets/logo.png, then uncomment the block below.
-<p align="center"><img src="docs/assets/logo.png" alt="Rakijazios logo" width="160"></p>
--->
-
-# Rakijazios
+<h1 align="center">
+  <img src="docs/assets/logo.png" alt="Rakijazios" width="220">
+</h1>
 
 **Rakijazios** is a customized, self-hosted **Rakazo** running on Host-001. The
 goal is a more **social** product: people find each other by `@handle` or email, have profile
